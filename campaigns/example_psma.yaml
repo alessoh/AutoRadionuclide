@@ -1,0 +1,24 @@
+campaign_id: psma-lu177-example-001
+name: PSMA-Lu177 Discovery Campaign
+description: Optimize radioligand constructs targeting PSMA for mCRPC therapy
+target: PSMA
+indication: mCRPC
+isotope: Lu-177
+gating_policy: automatic
+model_provider: mock
+model_id: mock-deterministic-v1
+batch_size: 4
+random_seed: 42
+db_path: psma_campaign.db
+
+budget:
+  max_cycles: 5
+  max_constructs_total: 50
+  max_cost_usd: 1000.0
+  max_wall_minutes: 10.0
+  max_model_calls: 100
+
+stopping:
+  target_campaign_score: 0.80
+  min_score_delta: 0.005
+  stall_patience: 3

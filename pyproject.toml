@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autoradionuclide"
+version = "0.1.0"
+description = "Reasoning Layer for AI-native radioligand discovery (in-silico closed loop)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.5",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "pyyaml>=6.0",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+rdkit = ["rdkit>=2023.9"]
+anthropic = ["anthropic>=0.25"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.scripts]
+ar-launch  = "cli.campaign_launcher:main"
+ar-bench   = "cli.benchmark_runner:main"
+ar-inspect = "cli.inspect_results:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["autoradionuclide", "frozen", "strategy", "cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

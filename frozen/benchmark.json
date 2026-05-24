@@ -1,0 +1,200 @@
+[
+  {
+    "id": "psma617-dota-lu177",
+    "name": "PSMA-617-DOTA-Lu177",
+    "targeting_vector": {
+      "name": "PSMA-617",
+      "target": "PSMA",
+      "vector_type": "small_molecule",
+      "smiles": null,
+      "notes": "FDA-approved PSMA-targeting small molecule (Pluvicto)"
+    },
+    "chelator": {
+      "name": "DOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]
+    },
+    "linker": null,
+    "radionuclide": "Lu-177",
+    "label": "approved",
+    "label_source": "public_knowledge",
+    "notes": "Lutetium vipivotide tetraxetan (Pluvicto). FDA approved March 2022 for mCRPC. First PSMA-targeted radioligand therapy approved in the US.",
+    "qualitative_label_numeric": 1.0
+  },
+  {
+    "id": "dotatate-dota-lu177",
+    "name": "DOTATATE-DOTA-Lu177",
+    "targeting_vector": {
+      "name": "DOTATATE",
+      "target": "SSTR2",
+      "vector_type": "peptide",
+      "smiles": null,
+      "notes": "Somatostatin analogue targeting SSTR2 (Lutathera)"
+    },
+    "chelator": {
+      "name": "DOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]
+    },
+    "linker": null,
+    "radionuclide": "Lu-177",
+    "label": "approved",
+    "label_source": "public_knowledge",
+    "notes": "Lutetium dotatate (Lutathera). FDA approved January 2018 for GEP-NETs. First approved peptide receptor radionuclide therapy (PRRT).",
+    "qualitative_label_numeric": 1.0
+  },
+  {
+    "id": "mibg-i131-direct",
+    "name": "MIBG-I131-direct",
+    "targeting_vector": {
+      "name": "MIBG",
+      "target": "NET",
+      "vector_type": "small_molecule",
+      "smiles": null,
+      "notes": "Meta-iodobenzylguanidine — direct radioiodination, no chelator"
+    },
+    "chelator": {
+      "name": "none",
+      "smiles": null,
+      "compatible_isotopes": ["I-131", "I-123"]
+    },
+    "linker": null,
+    "radionuclide": "I-131",
+    "label": "approved",
+    "label_source": "public_knowledge",
+    "notes": "Iobenguane I-131 (Azedra). FDA approved May 2018 for pheochromocytoma/paraganglioma. Direct iodination — no metal chelator required.",
+    "qualitative_label_numeric": 1.0
+  },
+  {
+    "id": "dotatoc-dota-y90",
+    "name": "DOTATOC-DOTA-Y90",
+    "targeting_vector": {
+      "name": "DOTATOC",
+      "target": "SSTR2",
+      "vector_type": "peptide",
+      "smiles": null,
+      "notes": "Somatostatin analogue targeting SSTR2 (SomaKit TOC)"
+    },
+    "chelator": {
+      "name": "DOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]
+    },
+    "linker": null,
+    "radionuclide": "Y-90",
+    "label": "clinical",
+    "label_source": "public_knowledge",
+    "notes": "Yttrium-90 DOTATOC (SomaKit TOC). EMA approved for NET imaging/therapy. In clinical use in Europe. Y-90 half-life (2.67d) shorter than Lu-177.",
+    "qualitative_label_numeric": 0.7
+  },
+  {
+    "id": "psma-it-dotaga-lu177",
+    "name": "PSMA-I&T-DOTAGA-Lu177",
+    "targeting_vector": {
+      "name": "PSMA-I&T",
+      "target": "PSMA",
+      "vector_type": "peptide",
+      "smiles": null,
+      "notes": "PSMA Inhibitor and Therapy peptide"
+    },
+    "chelator": {
+      "name": "DOTAGA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90"]
+    },
+    "linker": null,
+    "radionuclide": "Lu-177",
+    "label": "clinical",
+    "label_source": "public_knowledge",
+    "notes": "PSMA-I&T with DOTAGA chelator. Multiple ongoing Phase II/III trials for mCRPC. Strong clinical evidence but not yet FDA approved as of knowledge cutoff.",
+    "qualitative_label_numeric": 0.7
+  },
+  {
+    "id": "fapi46-dota-lu177",
+    "name": "FAPI-46-DOTA-Lu177",
+    "targeting_vector": {
+      "name": "FAPI-46",
+      "target": "FAP",
+      "vector_type": "small_molecule",
+      "smiles": null,
+      "notes": "Fibroblast Activation Protein Inhibitor 46"
+    },
+    "chelator": {
+      "name": "DOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]
+    },
+    "linker": null,
+    "radionuclide": "Lu-177",
+    "label": "clinical",
+    "label_source": "public_knowledge",
+    "notes": "FAPI-46 labeled with Lu-177. Multiple clinical trials across various solid tumors. FAP expressed in tumor stroma.",
+    "qualitative_label_numeric": 0.7
+  },
+  {
+    "id": "rgd-nota-ga68",
+    "name": "RGD-NOTA-Ga68",
+    "targeting_vector": {
+      "name": "RGD-peptide",
+      "target": "integrin_avb3",
+      "vector_type": "peptide",
+      "smiles": null,
+      "notes": "RGD cyclic peptide targeting integrin alpha-v-beta-3"
+    },
+    "chelator": {
+      "name": "NOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Ga-68", "Cu-64"]
+    },
+    "linker": "PEG2",
+    "radionuclide": "Ga-68",
+    "label": "clinical",
+    "label_source": "public_knowledge",
+    "notes": "Ga-68 RGD peptide. Clinical imaging trials for tumor angiogenesis. Imaging agent (Ga-68 not suitable for therapy due to short half-life).",
+    "qualitative_label_numeric": 0.7
+  },
+  {
+    "id": "unknown1-nota-lu177",
+    "name": "Unknown1-NOTA-Lu177",
+    "targeting_vector": {
+      "name": "UnknownVector-X",
+      "target": "unknown",
+      "vector_type": "small_molecule",
+      "smiles": null,
+      "notes": "ILLUSTRATIVE PLACEHOLDER — fictional compound for benchmark purposes only"
+    },
+    "chelator": {
+      "name": "NOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Ga-68", "Cu-64"]
+    },
+    "linker": null,
+    "radionuclide": "Lu-177",
+    "label": "failed",
+    "label_source": "public_knowledge",
+    "notes": "ILLUSTRATIVE PLACEHOLDER — fictional compound for benchmark purposes only. Represents a poor candidate: NOTA is unstable with Lu-177 (known chelation incompatibility) and target is unknown.",
+    "qualitative_label_numeric": 0.1
+  },
+  {
+    "id": "unknown2-dota-ga68-therapy",
+    "name": "Unknown2-DOTA-Ga68-therapy-attempt",
+    "targeting_vector": {
+      "name": "UnknownVector-Y",
+      "target": "VEGFR",
+      "vector_type": "antibody_fragment",
+      "smiles": null,
+      "notes": "ILLUSTRATIVE PLACEHOLDER — fictional compound for benchmark purposes only"
+    },
+    "chelator": {
+      "name": "DOTA",
+      "smiles": null,
+      "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]
+    },
+    "linker": null,
+    "radionuclide": "Ga-68",
+    "label": "failed",
+    "label_source": "public_knowledge",
+    "notes": "ILLUSTRATIVE PLACEHOLDER — fictional compound for benchmark purposes only. Represents a poor candidate: Ga-68 half-life (68 min) is far too short for therapy, suitable only for imaging. VEGFR targeting poorly validated.",
+    "qualitative_label_numeric": 0.1
+  }
+]
