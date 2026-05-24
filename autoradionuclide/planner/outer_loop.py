@@ -15,11 +15,15 @@ class OuterLoop:
     """Implements the AutoResearch outer meta-loop.
 
     Each turn:
-    1. Planner asks LLM to propose one strategy modification.
-    2. Runs one inner cycle with the modified strategy.
-    3. Compares campaign objective before and after.
-    4. Keeps modification if improved, reverts if not.
+    1. Planner asks LLM to propose one strategy modification (turns > 0 only).
+    2. Runs one inner cycle with the (possibly modified) strategy.
+    3. Compares campaign score before and after the inner cycle.
+    4. Keeps modification and new score if improved; reverts both if not.
     5. Records the decision and rationale in the ledger.
+
+    Non-decreasing invariant: the kept campaign score never decreases across
+    turns within one run. When a modification is not kept, the score reverts to
+    its value at the start of that turn (not to the inner cycle's result).
     """
 
     def __init__(
@@ -29,12 +33,14 @@ class OuterLoop:
         provider: ModelProvider,
         ledger: LedgerStore,
         base_strategy: dict,
+        run_id: str = "",
     ) -> None:
         self._spec = spec
         self._inner = inner_loop
         self._provider = provider
         self._ledger = ledger
         self._strategy = copy.deepcopy(base_strategy)
+        self._run_id = run_id
         self._cycle_number = 0
         self._campaign_score = 0.0
         self._score_history: list[float] = []
@@ -46,7 +52,7 @@ class OuterLoop:
         started = datetime.now(timezone.utc)
 
         for turn in range(self._spec.budget.max_cycles):
-            # Check stopping criteria
+            # Check stopping criteria before running this turn
             if self._should_stop():
                 print(f"[Planner] Stopping at turn {turn}: {self._stop_reason()}")
                 break
@@ -59,7 +65,10 @@ class OuterLoop:
             print(f"\n[Planner] === Turn {turn + 1}/{self._spec.budget.max_cycles} "
                   f"| Campaign score: {self._campaign_score:.3f} ===")
 
-            # 1. Propose strategy modification (outer loop)
+            # Capture score at turn start (used to revert if modification not kept)
+            score_before_turn = self._campaign_score
+
+            # 1. Propose strategy modification (outer loop, turns > 0 only)
             modification = None
             old_strategy = copy.deepcopy(self._strategy)
             if turn > 0 and len(self._score_history) >= 1:
@@ -67,7 +76,7 @@ class OuterLoop:
                 if modification:
                     self._apply_modification(modification)
 
-            # 2. Run inner cycle with current strategy
+            # 2. Run one inner cycle with current strategy
             provenance = ProvenanceContext.from_config(
                 model_id=self._spec.model_id,
                 config_dict=self._spec.model_dump(mode="json"),
@@ -83,7 +92,7 @@ class OuterLoop:
             )
             self._cycle_number += 1
 
-            # 3. Keep or revert modification
+            # 3. Keep or revert modification (and score)
             kept = None
             if modification is not None:
                 kept = cycle_result.score_delta > 0
@@ -100,10 +109,11 @@ class OuterLoop:
                         f"(delta={cycle_result.score_delta:+.3f})"
                     )
 
-                # Record the keep/revert decision
+                # Record the keep/revert decision with full context
                 self._ledger.append(LedgerEntry(
                     entry_type=LedgerEntryType.STRATEGY_MODIFICATION,
                     campaign_id=self._spec.campaign_id,
+                    run_id=self._run_id,
                     cycle_id=cycle_result.cycle_id,
                     provenance_id=provenance.id,
                     data={
@@ -111,6 +121,8 @@ class OuterLoop:
                         "score_delta": cycle_result.score_delta,
                         "kept": kept,
                         "rationale": modification.get("rationale", ""),
+                        "campaign_score_before": cycle_result.campaign_score_before,
+                        "campaign_score_after_raw": cycle_result.campaign_score_after,
                     },
                 ))
 
@@ -120,22 +132,35 @@ class OuterLoop:
             )
             cycle_result.strategy_kept = kept
 
-            self._campaign_score = cycle_result.campaign_score_after
+            # 4. Commit or revert the campaign score.
+            # Non-decreasing invariant: when a modification is not kept, revert the
+            # campaign score to the start of the turn so that the next turn's
+            # modification proposal is based on the last kept score, not a bad result.
+            if modification is None or kept:
+                self._campaign_score = cycle_result.campaign_score_after
+            else:
+                self._campaign_score = score_before_turn
+
             self._score_history.append(self._campaign_score)
-            if abs(cycle_result.score_delta) < self._spec.stopping.min_score_delta:
+
+            # 5. Update stall counter using the effective (kept) delta
+            effective_delta = self._campaign_score - score_before_turn
+            if abs(effective_delta) < self._spec.stopping.min_score_delta:
                 self._stall_count += 1
             else:
                 self._stall_count = 0
 
             summaries.append(cycle_result.model_dump(mode="json"))
             print(
-                f"[Planner] Cycle {self._cycle_number}: "
-                f"score {cycle_result.campaign_score_before:.3f} -> "
-                f"{cycle_result.campaign_score_after:.3f} "
-                f"(delta={cycle_result.score_delta:+.3f})"
+                f"[Planner] Turn {turn + 1} complete: "
+                f"score {score_before_turn:.3f} -> {self._campaign_score:.3f} "
+                f"(effective delta={effective_delta:+.3f}"
+                + (f", raw inner delta={cycle_result.score_delta:+.3f}" if modification else "")
+                + ")"
             )
 
-        print(f"\n[Planner] Campaign finished. Final score: {self._campaign_score:.3f}")
+        print(f"\n[Planner] Campaign finished. "
+              f"Turns run: {len(summaries)} | Final kept score: {self._campaign_score:.3f}")
         return summaries
 
     def _propose_modification(self) -> Optional[dict]:

@@ -36,6 +36,7 @@ class InnerLoop:
         wet_lab: WetLabInterface,
         ledger: LedgerStore,
         strategy_config: dict,
+        run_id: str = "",
     ) -> None:
         self._spec = spec
         self._generator = generator
@@ -44,6 +45,7 @@ class InnerLoop:
         self._wet_lab = wet_lab
         self._ledger = ledger
         self._strategy = strategy_config
+        self._run_id = run_id
         self._known_keys: set[str] = set()
 
     def run(
@@ -67,6 +69,7 @@ class InnerLoop:
             provenance=provenance,
             known_ids=self._known_keys,
             prioritized_targets=self._strategy.get("prioritized_targets"),
+            run_id=self._run_id,
         )
 
         # 2. Score through frozen harness
@@ -78,6 +81,7 @@ class InnerLoop:
             self._ledger.append(LedgerEntry(
                 entry_type=LedgerEntryType.SCORE,
                 campaign_id=self._spec.campaign_id,
+                run_id=self._run_id,
                 cycle_id=cycle_id,
                 construct_id=c.id,
                 provenance_id=provenance.id,
@@ -98,6 +102,7 @@ class InnerLoop:
         self._ledger.append(LedgerEntry(
             entry_type=LedgerEntryType.SELECTION,
             campaign_id=self._spec.campaign_id,
+            run_id=self._run_id,
             cycle_id=cycle_id,
             provenance_id=provenance.id,
             data={
@@ -110,7 +115,7 @@ class InnerLoop:
         safety = check_batch(selected, dry_run=dry_run)
         selected = [c for c in selected if safety[c.id].passed]
         if not selected:
-            return CycleResult(
+            cycle_result = CycleResult(
                 cycle_id=cycle_id,
                 campaign_id=self._spec.campaign_id,
                 cycle_number=cycle_number,
@@ -124,11 +129,20 @@ class InnerLoop:
                 started_at=started_at,
                 finished_at=datetime.now(timezone.utc),
             )
+            self._ledger.append(LedgerEntry(
+                entry_type=LedgerEntryType.CYCLE_SUMMARY,
+                campaign_id=self._spec.campaign_id,
+                run_id=self._run_id,
+                cycle_id=cycle_id,
+                provenance_id=provenance.id,
+                data=cycle_result.model_dump(mode="json"),
+            ))
+            return cycle_result
 
         # 5. Human-in-the-loop gate
         approved = _apply_gate(
             selected, self._spec.gating_policy, self._ledger,
-            self._spec.campaign_id, cycle_id, provenance.id
+            self._spec.campaign_id, cycle_id, provenance.id, self._run_id
         )
 
         # 6. Emit experiment request
@@ -146,6 +160,7 @@ class InnerLoop:
         self._ledger.append(LedgerEntry(
             entry_type=LedgerEntryType.REQUEST,
             campaign_id=self._spec.campaign_id,
+            run_id=self._run_id,
             cycle_id=cycle_id,
             provenance_id=provenance.id,
             data=req.model_dump(mode="json"),
@@ -158,6 +173,7 @@ class InnerLoop:
         self._ledger.append(LedgerEntry(
             entry_type=LedgerEntryType.RESULT,
             campaign_id=self._spec.campaign_id,
+            run_id=self._run_id,
             cycle_id=cycle_id,
             provenance_id=provenance.id,
             data=result.model_dump(mode="json"),
@@ -170,16 +186,12 @@ class InnerLoop:
 
         # Build per-objective aligned construct lists
         if obj_values and approved:
-            # Each objective may have multiple values (one per construct × assay)
-            # Align by repeating constructs to match the number of results per objective
             constructs_for_update: list[CandidateConstruct] = []
             aligned_values: dict[str, list[float]] = {}
             for obj_name, vals in obj_values.items():
-                # vals has one entry per construct for this assay
                 n_vals = len(vals)
-                # Repeat/truncate constructs to match
                 padded = (approved * ((n_vals // len(approved)) + 1))[:n_vals]
-                constructs_for_update = padded  # all objectives use same construct list
+                constructs_for_update = padded
                 aligned_values[obj_name] = vals
 
             if constructs_for_update:
@@ -187,6 +199,7 @@ class InnerLoop:
                 self._ledger.append(LedgerEntry(
                     entry_type=LedgerEntryType.SURROGATE_REFIT,
                     campaign_id=self._spec.campaign_id,
+                    run_id=self._run_id,
                     cycle_id=cycle_id,
                     provenance_id=provenance.id,
                     data={"n_observations": {k: len(v) for k, v in obj_values.items()}},
@@ -220,6 +233,7 @@ class InnerLoop:
         self._ledger.append(LedgerEntry(
             entry_type=LedgerEntryType.CYCLE_SUMMARY,
             campaign_id=self._spec.campaign_id,
+            run_id=self._run_id,
             cycle_id=cycle_id,
             provenance_id=provenance.id,
             data=cycle_result.model_dump(mode="json"),
@@ -234,6 +248,7 @@ def _apply_gate(
     campaign_id: str,
     cycle_id: str,
     provenance_id: str,
+    run_id: str = "",
 ) -> list[CandidateConstruct]:
     if policy == GatingPolicy.MANDATORY:
         print(f"\n[GATE] Mandatory approval required for {len(constructs)} constructs.")
@@ -248,6 +263,7 @@ def _apply_gate(
     ledger.append(LedgerEntry(
         entry_type=LedgerEntryType.APPROVAL,
         campaign_id=campaign_id,
+        run_id=run_id,
         cycle_id=cycle_id,
         provenance_id=provenance_id,
         data={

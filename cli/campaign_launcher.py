@@ -1,5 +1,6 @@
 """ar-launch: run a campaign from a YAML spec (analog of run_autoresearch.sh)."""
 from __future__ import annotations
+import uuid
 import click
 from pathlib import Path
 from autoradionuclide.config.schema import CampaignSpec
@@ -18,7 +19,7 @@ import strategy.hyperparams as hp
 
 @click.command()
 @click.argument("spec_path", default="campaigns/example_psma.yaml")
-@click.option("--dry-run", is_flag=True, default=False, help="Run without emitting real requests.")
+@click.option("--dry-run", is_flag=True, default=False, help="Run without persisting to the database.")
 @click.option("--cycles", default=None, type=int, help="Override max_cycles from spec.")
 def main(spec_path: str, dry_run: bool, cycles: int | None):
     """Launch a discovery campaign from YAML spec (analog of run_autoresearch.sh)."""
@@ -26,9 +27,21 @@ def main(spec_path: str, dry_run: bool, cycles: int | None):
     if cycles is not None:
         spec.budget.max_cycles = cycles
 
-    ledger = LedgerStore(spec.db_path)
+    # Every launch gets a unique run_id so its ledger entries can be scoped
+    # independently of all other runs that share the same campaign_id.
+    run_id = str(uuid.uuid4())[:8]
+
+    # Dry-run uses an in-memory ledger: results are never written to the
+    # persistent database and the end-of-run report reflects only this run.
+    if dry_run:
+        ledger = LedgerStore(":memory:")
+        print(f"[Launch] DRY-RUN mode — results are NOT persisted to '{spec.db_path}'.")
+    else:
+        ledger = LedgerStore(spec.db_path)
+
     provider = MockModelProvider(ledger=ledger)
     provider.set_campaign(spec.campaign_id)
+    provider.set_run_id(run_id)
 
     surrogate_bank = SurrogateBank(
         [o.name for o in spec.objectives], seed=spec.random_seed
@@ -53,6 +66,7 @@ def main(spec_path: str, dry_run: bool, cycles: int | None):
         wet_lab=wet_lab,
         ledger=ledger,
         strategy_config=strategy_config,
+        run_id=run_id,
     )
     outer = OuterLoop(
         spec=spec,
@@ -60,14 +74,18 @@ def main(spec_path: str, dry_run: bool, cycles: int | None):
         provider=provider,
         ledger=ledger,
         base_strategy=strategy_config,
+        run_id=run_id,
     )
 
-    print(f"[Launch] Campaign: {spec.name}")
-    print(f"[Launch] Target: {spec.target} | Isotope: {spec.isotope.value}")
-    print(f"[Launch] Max cycles: {spec.budget.max_cycles} | Dry-run: {dry_run}")
+    print(f"[Launch] Campaign : {spec.name}")
+    print(f"[Launch] Run ID   : {run_id}  (use --run-id {run_id} with ar-inspect)")
+    print(f"[Launch] Target   : {spec.target} | Isotope: {spec.isotope.value}")
+    print(f"[Launch] Max turns: {spec.budget.max_cycles} | Dry-run: {dry_run}")
 
     summaries = outer.run(dry_run=dry_run)
-    print_campaign_report(ledger, spec.campaign_id)
+
+    # Report scoped to this run only — never contaminated by earlier runs
+    print_campaign_report(ledger, spec.campaign_id, run_id=run_id)
     return summaries
 
 

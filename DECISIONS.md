@@ -145,3 +145,38 @@ system fires once per unique `"kind:name"` key per Python session. A module-leve
 on warning counts must call `reset_registry_warning_state()` at the start to clear this
 state, since a name seen in a prior test would otherwise suppress the warning in the
 test under examination.
+
+## D15: Per-launch run_id scopes every ledger entry to one run
+
+Each `ar-launch` invocation generates a unique 8-character `run_id` (UUID prefix).
+Every ledger entry written during that launch carries this `run_id`. This allows
+`ar-inspect` and `inspect_campaign()` to scope reports to a single run without
+deleting or altering any historical entries — the ledger remains purely append-only.
+The `run_id` column was added to the SQLite schema with a migration guard
+(`ALTER TABLE ... ADD COLUMN` inside a try/except) so existing databases are upgraded
+on first use without data loss. The `LedgerStore.query()` method accepts
+`run_id=None` to return all runs (the pre-run_id behavior) or `run_id="<id>"` to
+scope to a single run. Reports default to the most recent run when no `run_id` is
+specified in the CLI.
+
+## D16: Dry-run uses an in-memory ledger to guarantee no persistence
+
+When `ar-launch --dry-run` is used, the launcher creates `LedgerStore(":memory:")`.
+The in-memory ledger is fully functional for that run (all entries are written and
+readable within the session) but is discarded on process exit. This is a stronger
+guarantee than using a file-based ledger and deleting it afterwards: there is no
+window where a crash could leave a partial file, and there is no risk of accidentally
+deleting the wrong database. The persistent database at `spec.db_path` is never
+opened in dry-run mode.
+
+## D17: Target campaign score set to 0.99 to allow observable multi-turn runs
+
+The example PSMA campaign (`campaigns/example_psma.yaml`) and the MIBG demo
+(`campaigns/mibg_demo.yaml`) both set `target_campaign_score: 0.99`. The previous
+PSMA default of 0.80 caused the outer loop to stop after turn 1 because the mock
+surrogate routinely scores the first batch above 0.80, making the stopping criterion
+unreachable by design. Setting the target to 0.99 (an effectively unreachable score
+given the mock provider) ensures the outer loop runs through all `max_cycles` turns,
+which is the intended behavior for demonstrating the keep-or-revert mechanism.
+`stall_patience` is set to 5 (PSMA) or 10 (MIBG demo) to prevent stall-based early
+stopping during short demonstration runs.

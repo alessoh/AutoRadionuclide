@@ -1,0 +1,58 @@
+# MIBG / NET Featurization Demo Campaign
+#
+# PURPOSE: Engineering demonstration of the real-structure featurization path.
+# This campaign is explicitly labeled a featurization demonstration, not a
+# clinical candidate pipeline.
+#
+# CHEMISTRY REPRESENTED:
+#   - MIBG (meta-iodobenzylguanidine, iobenguane) is a clinically established
+#     NET (norepinephrine transporter) ligand used in I-131 MIBG therapy (Azedra)
+#     and I-123 MIBG imaging. It is directly radioiodinated — no macrocyclic
+#     chelator is used. This is represented as chelator="none" in the data model.
+#   - MIBG SMILES (NC(=N)NCc1cccc(I)c1) is in the registry (PubChem CID 60860),
+#     so MIBG+none+I-131 constructs resolve to FULL featurization quality.
+#   - Constructs with DOTA/NOTA/DOTAGA chelators resolve to PARTIAL quality
+#     (chelator SMILES known; targeting-vector SMILES not yet in registry).
+#   - The mock provider also generates non-MIBG vectors; those remain FALLBACK.
+#     This is expected and documented — the goal is to demonstrate that at least
+#     some constructs exercise the real descriptor and Tanimoto paths.
+#
+# HOW TO RUN:
+#   ar-launch campaigns/mibg_demo.yaml
+#   ar-inspect mibg_demo.db                    # most recent run (default)
+#   ar-inspect mibg_demo.db --all-runs         # full history across runs
+#   ar-inspect mibg_demo.db --list-runs        # see all run IDs
+#
+# OUTER LOOP CONFIGURATION:
+#   target_campaign_score: 0.99  (unreachable — all 4 turns will run)
+#   stall_patience: 10           (do not stop on stall within 4 turns)
+#   This lets the outer AutoResearch loop make visible keep-or-revert decisions.
+
+campaign_id: mibg-net-demo-001
+name: MIBG/NET Featurization Demo Campaign
+description: >
+  Engineering demonstration of real-structure featurization using the MIBG
+  targeting vector (PubChem CID 60860) and the DOTA/NOTA/DOTAGA chelator registry.
+  MIBG + direct radioiodination (chelator=none) with I-131 is the only FULL-quality
+  construct type; chelator-bearing constructs are PARTIAL. NOT a clinical pipeline.
+target: NET
+indication: neuroblastoma/pheochromocytoma
+isotope: I-131
+gating_policy: automatic
+model_provider: mock
+model_id: mock-deterministic-v1
+batch_size: 2
+random_seed: 7
+db_path: mibg_demo.db
+
+budget:
+  max_cycles: 4
+  max_constructs_total: 50
+  max_cost_usd: 1000.0
+  max_wall_minutes: 10.0
+  max_model_calls: 100
+
+stopping:
+  target_campaign_score: 0.99
+  min_score_delta: 0.001
+  stall_patience: 10

@@ -35,6 +35,7 @@ class CandidateGenerator:
         provenance: ProvenanceContext,
         known_ids: set[str] | None = None,
         prioritized_targets: list[str] | None = None,
+        run_id: str = "",
     ) -> list[CandidateConstruct]:
         """Ask the model provider for n candidate constructs and return validated objects."""
         system = PROMPT_TEMPLATES["generate_candidates"].format(
@@ -69,6 +70,7 @@ class CandidateGenerator:
             entry = LedgerEntry(
                 entry_type=LedgerEntryType.PROPOSAL,
                 campaign_id=campaign_id,
+                run_id=run_id,
                 cycle_id=cycle_id,
                 provenance_id=provenance.id,
                 data={

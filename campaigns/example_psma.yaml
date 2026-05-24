@@ -19,6 +19,6 @@ budget:
   max_model_calls: 100
 
 stopping:
-  target_campaign_score: 0.80
+  target_campaign_score: 0.99
   min_score_delta: 0.005
-  stall_patience: 3
+  stall_patience: 5

@@ -199,6 +199,7 @@ class LedgerEntry(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     entry_type: LedgerEntryType
     campaign_id: str
+    run_id: str = ""          # unique per launch; empty for legacy entries
     cycle_id: str = ""
     construct_id: Optional[str] = None
     model_call_id: Optional[str] = None

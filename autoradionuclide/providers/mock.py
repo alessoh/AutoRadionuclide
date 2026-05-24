@@ -5,22 +5,29 @@ from typing import Any
 from autoradionuclide.domain.models import ModelRequest, ModelResponse, TokenUsage
 from autoradionuclide.providers.base import ModelProvider
 
-# Canned candidate components the mock cycles through deterministically
+# Canned candidate components the mock cycles through deterministically.
+# Registry coverage:
+#   Chelators with SMILES: DOTA, NOTA, DOTAGA (→ PARTIAL quality when paired)
+#   Targeting vectors with SMILES: MIBG (→ FULL quality when chelator="none")
 _VECTORS = [
-    {"name": "PSMA-617", "target": "PSMA", "vector_type": "small_molecule"},
-    {"name": "DOTATATE", "target": "SSTR2", "vector_type": "peptide"},
-    {"name": "FAPI-46",  "target": "FAP",  "vector_type": "small_molecule"},
-    {"name": "RGD-peptide", "target": "integrin_avb3", "vector_type": "peptide"},
-    {"name": "PSMA-I&T", "target": "PSMA", "vector_type": "peptide"},
-    {"name": "DOTATOC",  "target": "SSTR2", "vector_type": "peptide"},
-    {"name": "MIP-1072", "target": "PSMA", "vector_type": "small_molecule"},
-    {"name": "FAPI-74",  "target": "FAP",  "vector_type": "small_molecule"},
+    {"name": "PSMA-617",   "target": "PSMA",        "vector_type": "small_molecule"},
+    {"name": "DOTATATE",   "target": "SSTR2",        "vector_type": "peptide"},
+    {"name": "FAPI-46",    "target": "FAP",          "vector_type": "small_molecule"},
+    {"name": "RGD-peptide","target": "integrin_avb3","vector_type": "peptide"},
+    {"name": "PSMA-I&T",   "target": "PSMA",         "vector_type": "peptide"},
+    {"name": "DOTATOC",    "target": "SSTR2",        "vector_type": "peptide"},
+    {"name": "MIP-1072",   "target": "PSMA",         "vector_type": "small_molecule"},
+    {"name": "FAPI-74",    "target": "FAP",          "vector_type": "small_molecule"},
+    # MIBG: directly radioiodinated NET ligand; paired only with chelator="none"
+    {"name": "MIBG",       "target": "NET",          "vector_type": "small_molecule"},
 ]
 _CHELATORS = [
-    {"name": "DOTA", "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]},
-    {"name": "NOTA", "compatible_isotopes": ["Ga-68", "Cu-64"]},
+    {"name": "DOTA",   "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90", "Ga-68"]},
+    {"name": "NOTA",   "compatible_isotopes": ["Ga-68", "Cu-64"]},
     {"name": "DOTAGA", "compatible_isotopes": ["Lu-177", "Ac-225", "Y-90"]},
-    {"name": "PSMA", "compatible_isotopes": ["Lu-177"]},
+    {"name": "PSMA",   "compatible_isotopes": ["Lu-177"]},
+    # Direct labeling: no separate chelator (e.g. I-131 or At-211 bonded to MIBG)
+    {"name": "none",   "compatible_isotopes": ["I-131", "At-211"]},
 ]
 _LINKERS = [None, "PEG2", "PEG4", "alkyl-C3"]
 

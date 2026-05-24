@@ -90,13 +90,39 @@ python -m cli.campaign_launcher campaigns/example_psma.yaml --cycles 5
 ar-launch campaigns/example_psma.yaml --cycles 5 --dry-run
 ```
 
+`--dry-run` uses an in-memory ledger: results are never written to the persistent
+database. The end-of-run report reflects only this run's entries.
+
+Every launch prints a `Run ID` that can be passed to `ar-inspect` to scope the
+report to that run only.
+
+### Run the featurization demo campaign
+
+```bash
+ar-launch campaigns/mibg_demo.yaml --cycles 4
+```
+
+This campaign targets NET (neuroendocrine tumors) with MIBG (iobenguane) + I-131 —
+an established clinical radiopharmaceutical that uses direct radioiodination (no
+chelator). The MIBG SMILES is verified against PubChem CID 60860 and the chelator
+is explicitly `"none"`, giving honest FULL featurization quality. The demo is
+labeled as an engineering demonstration: the scoring functions are frozen heuristics,
+not validated predictive models.
+
 ### Inspect a campaign ledger
 
 ```bash
 python -m cli.inspect_results psma_campaign.db
 ar-inspect psma_campaign.db --list-campaigns
-ar-inspect psma_campaign.db --cycle-id <cycle_id>
+ar-inspect psma_campaign.db --list-runs
+ar-inspect psma_campaign.db --run-id <run_id>
+ar-inspect psma_campaign.db --all-runs
 ```
+
+By default, `ar-inspect` reports the most recent run. Use `--all-runs` to see the
+full campaign history across all runs. Use `--list-runs` to enumerate run IDs.
+Reports are always scoped to a single run unless `--all-runs` is specified — multiple
+launches of the same campaign never contaminate each other's reports.
 
 ### Run the full test suite
 

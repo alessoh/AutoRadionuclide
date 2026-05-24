@@ -16,6 +16,7 @@ class ModelProvider(ABC):
 
     def __init__(self, ledger=None) -> None:
         self._ledger = ledger   # LedgerStore | None
+        self._run_id: str = ""
 
     def complete(self, request: ModelRequest) -> ModelResponse:
         t0 = time.monotonic()
@@ -34,6 +35,7 @@ class ModelProvider(ABC):
             id=str(uuid.uuid4()),
             entry_type=LedgerEntryType.MODEL_CALL,
             campaign_id=getattr(self, "_campaign_id", ""),
+            run_id=self._run_id,
             model_call_id=req.request_id,
             data={
                 "model": req.model,
@@ -48,6 +50,9 @@ class ModelProvider(ABC):
 
     def set_campaign(self, campaign_id: str) -> None:
         self._campaign_id = campaign_id
+
+    def set_run_id(self, run_id: str) -> None:
+        self._run_id = run_id
 
 
 PROMPT_TEMPLATES: dict[str, str] = {
