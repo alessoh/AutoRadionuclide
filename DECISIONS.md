@@ -19,14 +19,56 @@ matches the question regulators care about: "does the engine focus attention on
 compounds that turned out to be good?" Spearman rho is also reported as a secondary
 metric.
 
-## D3: GP surrogates use a one-hot feature vector, not molecular fingerprints
+## D3: Featurization uses real RDKit descriptors + Morgan fingerprints, with honest fallback
 
-RDKit Morgan fingerprints would be more chemically meaningful, but they require a
-complete SMILES for every construct. During the early in-silico phase, many constructs
-have no validated SMILES (just component names). The one-hot encoding of target,
-chelator, isotope, and vector type is always available and sufficient to demonstrate
-the surrogate machinery. The featurization function (`surrogates/gp_surrogate.py`)
-is the only place to update when real fingerprints become available.
+The featurization package (`autoradionuclide/featurization/`) computes two distinct
+representations: (a) 8 RDKit physicochemical descriptors for GP surrogate regression
+and (b) a 2048-bit Morgan-2 fingerprint for Tanimoto-based diversity selection.
+The descriptor set is intentionally small (8 features) because Gaussian-process
+surrogates fit on very few observations and a high-dimensional representation would
+overfit. Structure resolution uses a three-priority scheme: full construct SMILES if
+provided, then part-level SMILES from Chelator/TargetingVector objects, then a
+small verified registry (DOTA, NOTA, DOTAGA). When no structure resolves, the record
+is flagged FALLBACK and its vectors are explicit zeros — no values are fabricated.
+FALLBACK records are excluded from the GP fit; PARTIAL records (some parts resolved)
+are included. The radionuclide is represented by factual physics features (atomic
+number, half-life, decay-mode encoding), not by attempting to model the coordination
+complex with RDKit.
+
+## D10: DOTA and NOTA have identical Morgan-2 fingerprints — documented, not fixed
+
+DOTA (12-membered ring) and NOTA (9-membered ring) produce identical 2048-bit
+Morgan fingerprints at radius 2. All atom environments visible at radius 2 are shared:
+every nitrogen atom sees two CH₂ neighbors in the ring and one CH₂COOH arm.
+Ring-size differences only become visible at radius ≥ 3 (though still identical even
+there, due to the repeating N-CH₂-CH₂-N pattern). This is a documented property of
+Morgan fingerprints for macrocyclic compounds. The consequence for diversity selection
+is that constructs differing only in DOTA vs. NOTA are treated as structurally
+identical, which is the scientifically defensible outcome — they share the same
+local chemical environment. The test suite documents this explicitly. DOTAGA is
+fingerprint-distinct from both because its glutaric arm creates unique atom
+environments.
+
+## D11: Descriptors-for-regression versus fingerprint-for-diversity are kept separate
+
+The 8-feature descriptor vector and the 2048-bit fingerprint serve different purposes
+and are kept as separate fields on FeatureRecord rather than being combined. The
+descriptor vector is what the GP scaler and kernel operate on; the fingerprint is what
+Tanimoto distance operates on. Mixing them (e.g. concatenating descriptor values with
+fingerprint bits) would produce an incoherent distance metric where MW and logP values
+arbitrarily compete with bit-counts. The two representations are computed once per
+featurize() call and retrieved by their respective consumers (surrogates → descriptors;
+policy → fingerprint).
+
+## D12: FALLBACK records excluded from GP fit, not zero-padded
+
+When no organic structure resolves, the featurizer returns an explicit zero vector
+rather than fabricating descriptor values. In the surrogate, FALLBACK records are
+silently excluded from the training set — not zero-padded — because a zero descriptor
+vector does not represent a chemically meaningful point in descriptor space and would
+corrupt the GP's hyperparameter optimisation. The surrogate falls back to the heuristic
+prior (frozen harness) for FALLBACK predictions, maintaining the same behavior as
+before any GP fitting occurs. This choice is documented in gp_surrogate.py.
 
 ## D4: The Ga-68 "failed therapy" benchmark compound is intentional
 

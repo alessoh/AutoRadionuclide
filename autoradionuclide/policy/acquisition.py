@@ -1,11 +1,29 @@
-"""Active-learning policy — acquisition functions and batch selection with diversity."""
+"""Active-learning policy — acquisition functions and batch selection with diversity.
+
+Diversity metric: Tanimoto distance over Morgan fingerprints from the featurization
+package. Two constructs are considered diverse if their Tanimoto distance is at or
+above the ``diversity_threshold`` (default 0.3, range [0, 1]).
+
+When a construct has FALLBACK quality (no organic structure resolved), its fingerprint
+is all-zeros. The ``tanimoto_distance`` function returns 1.0 for the all-zeros case,
+treating structures of unknown similarity as maximally distant and therefore always
+eligible for selection.
+"""
 from __future__ import annotations
+
 import numpy as np
 from scipy.stats import norm
 from typing import Literal
-from autoradionuclide.domain.models import CandidateConstruct, ObjectiveSpec, ObjectiveDirection, ScoredObjective
-from autoradionuclide.surrogates.gp_surrogate import SurrogateBank, featurize
+
+from autoradionuclide.domain.models import (
+    CandidateConstruct,
+    ObjectiveDirection,
+    ObjectiveSpec,
+    ScoredObjective,
+)
+from autoradionuclide.featurization import featurize, tanimoto_distance
 from autoradionuclide.scoring.aggregator import aggregate_score
+from autoradionuclide.surrogates.gp_surrogate import SurrogateBank
 
 
 AcquisitionFunction = Literal["UCB", "EI", "thompson"]
@@ -27,7 +45,8 @@ class ActiveLearningPolicy:
 
     The batch selection is greedy with diversity enforcement: after scoring
     all candidates, we iteratively pick the highest-scoring one that is
-    sufficiently different (in feature space) from already-selected ones.
+    sufficiently different (Tanimoto distance over Morgan fingerprints) from
+    already-selected ones.
     """
 
     def __init__(
@@ -71,7 +90,6 @@ class ActiveLearningPolicy:
 
             agg_mean, _ = aggregate_score(objectives, self._specs)
 
-            # Compute acquisition score using prediction uncertainty
             stds = [preds[s.name].uncertainty for s in self._specs if s.name in preds]
             mean_std = float(np.mean(stds)) if stds else 0.0
 
@@ -86,26 +104,29 @@ class ActiveLearningPolicy:
 
         scored.sort(key=lambda x: x[1], reverse=True)
 
-        # Greedy diversity selection
-        selected = []
-        selected_feats: list[np.ndarray] = []
+        # Greedy diversity selection using Tanimoto distance over Morgan fingerprints
+        selected: list[tuple[CandidateConstruct, float]] = []
+        selected_fps: list[np.ndarray] = []
         for c, acq in scored:
             if len(selected) >= batch_size:
                 break
-            feat = featurize(c)
-            if _is_diverse(feat, selected_feats, self._div_threshold):
+            fp = featurize(c).fingerprint
+            if _is_diverse(fp, selected_fps, self._div_threshold):
                 selected.append((c, acq))
-                selected_feats.append(feat)
+                selected_fps.append(fp)
 
-        # If diversity is too strict, fall back to top-k
+        # If diversity threshold is too strict, fall back to top-k
         if not selected:
             selected = scored[:batch_size]
 
         return selected
 
 
-def _is_diverse(feat: np.ndarray, existing: list[np.ndarray], threshold: float) -> bool:
+def _is_diverse(
+    fp: np.ndarray, existing: list[np.ndarray], threshold: float
+) -> bool:
+    """Return True if ``fp`` is Tanimoto-distant from all fingerprints in ``existing``."""
     if not existing:
         return True
-    dists = [float(np.linalg.norm(feat - e)) for e in existing]
+    dists = [tanimoto_distance(fp, e) for e in existing]
     return min(dists) >= threshold

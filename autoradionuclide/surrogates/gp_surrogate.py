@@ -1,51 +1,41 @@
-"""Gaussian Process surrogate models — one per objective, refitted as results arrive."""
+"""Gaussian Process surrogate models — one per objective, refitted as results arrive.
+
+Featurization: the surrogates fit on the standardized descriptor vector from
+``autoradionuclide.featurization``. This is a compact set of 8 standard RDKit
+physicochemical descriptors (MW, logP, TPSA, HBD, HBA, RotBonds, Rings, FracCSP3).
+
+Degraded-record handling:
+  FALLBACK quality records (no organic structure resolved) are excluded from the
+  GP fit. Their presence emits a warning (raised by the featurizer). Predictions
+  for FALLBACK constructs fall back to the heuristic prior from the frozen harness
+  rather than using the GP.
+
+  PARTIAL quality records (some parts resolved) are included in the fit. Their
+  descriptors reflect only the resolved portion, which is noted in the provenance
+  but does not raise an additional warning here.
+
+Note: fitting on 8 real descriptors from a handful of observations may still
+produce the GP convergence warnings seen with the previous one-hot representation.
+The limiting factor is the tiny amount of labelled data, not the representation.
+"""
 from __future__ import annotations
-import numpy as np
+
+import warnings
 from typing import Optional
+
+import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern, WhiteKernel, ConstantKernel
+from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
 from sklearn.preprocessing import StandardScaler
+
 from autoradionuclide.domain.models import CandidateConstruct, ObjectiveValue, ProvenanceTag
-
-
-# Feature encoding constants
-_KNOWN_TARGETS = ["PSMA", "SSTR2", "FAP", "integrin_avb3", "NET", "VEGFR", "unknown"]
-_KNOWN_CHELATORS = ["DOTA", "NOTA", "DOTAGA", "PSMA", "other"]
-_KNOWN_ISOTOPES = ["Lu-177", "Ac-225", "Ga-68", "Y-90", "I-131", "Bi-213", "At-211"]
-_KNOWN_VTYPES = ["small_molecule", "peptide", "antibody_fragment"]
-
-
-def featurize(construct: CandidateConstruct) -> np.ndarray:
-    """Return a fixed-length feature vector for a construct.
-
-    Uses one-hot encoding of categorical components plus binary flags.
-    This is a simplified representation; a real system would use
-    molecular fingerprints from the full SMILES.
-    """
-    target = construct.targeting_vector.target
-    chelator = construct.chelator.name
-    isotope = construct.radionuclide.value
-    vtype = construct.targeting_vector.vector_type
-    has_linker = 1.0 if construct.linker else 0.0
-
-    t_enc = _one_hot(target, _KNOWN_TARGETS)
-    c_enc = _one_hot(chelator, _KNOWN_CHELATORS)
-    i_enc = _one_hot(isotope, _KNOWN_ISOTOPES)
-    v_enc = _one_hot(vtype, _KNOWN_VTYPES)
-    return np.concatenate([t_enc, c_enc, i_enc, v_enc, [has_linker]])
-
-
-def _one_hot(val: str, options: list[str]) -> np.ndarray:
-    vec = np.zeros(len(options))
-    idx = options.index(val) if val in options else len(options) - 1
-    vec[idx] = 1.0
-    return vec
+from autoradionuclide.featurization import FeatureQuality, featurize
 
 
 class ObjectiveSurrogate:
     """GP surrogate for a single objective.
 
-    Stores all observed (feature, value) pairs and refits the GP
+    Stores all observed (descriptor_vector, value) pairs and refits the GP
     whenever update() is called. Returns (mean, std) for any construct.
     """
 
@@ -59,10 +49,20 @@ class ObjectiveSurrogate:
         self._fitted = False
 
     def update(self, constructs: list[CandidateConstruct], values: list[float]) -> None:
-        """Add observations and refit the GP."""
+        """Add observations and refit the GP.
+
+        FALLBACK-quality records are excluded: their descriptor vectors are
+        explicit zeros that do not represent a real chemical structure, so
+        including them would corrupt the training set.
+        """
         for c, v in zip(constructs, values):
-            self._X.append(featurize(c))
+            record = featurize(c)
+            if record.quality is FeatureQuality.FALLBACK:
+                # Warning already emitted by featurize(); nothing to add here.
+                continue
+            self._X.append(record.descriptor_vector.copy())
             self._y.append(v)
+
         if len(self._X) >= 2:
             X = np.array(self._X)
             y = np.array(self._y)
@@ -78,17 +78,23 @@ class ObjectiveSurrogate:
             self._fitted = True
 
     def predict(self, construct: CandidateConstruct) -> ObjectiveValue:
-        """Return predicted mean ± std for a candidate."""
-        if not self._fitted:
-            # Prior: return heuristic from frozen harness
+        """Return predicted mean ± std for a candidate.
+
+        FALLBACK constructs cannot be featurized and fall back to the heuristic
+        prior from the frozen harness, regardless of whether the GP is fitted.
+        """
+        record = featurize(construct)
+
+        if not self._fitted or record.quality is FeatureQuality.FALLBACK:
             import frozen.harness as h
             scores = h.score_all(construct)
             if self.objective_name in scores:
                 return scores[self.objective_name]
-            return ObjectiveValue(estimate=0.5, uncertainty=0.3, source=ProvenanceTag.HEURISTIC)
+            return ObjectiveValue(
+                estimate=0.5, uncertainty=0.3, source=ProvenanceTag.HEURISTIC
+            )
 
-        feat = featurize(construct).reshape(1, -1)
-        feat_scaled = self._scaler.transform(feat)
+        feat_scaled = self._scaler.transform(record.descriptor_vector.reshape(1, -1))
         mean, std = self._gp.predict(feat_scaled, return_std=True)
         return ObjectiveValue(
             estimate=float(np.clip(mean[0], 0, 1)),

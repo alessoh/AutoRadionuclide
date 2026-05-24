@@ -64,6 +64,14 @@ pip install -e .
 pip install -e ".[anthropic]"
 ```
 
+RDKit is a required dependency (not optional). It is included in the standard
+`pip install -e .` command above. On a conda environment it can alternatively
+be installed from conda-forge:
+
+```bash
+conda install -c conda-forge rdkit
+```
+
 ### Run the retrospective benchmark
 
 ```bash
@@ -120,6 +128,79 @@ its measured score by altering the benchmark or scoring definitions.
 
 ---
 
+## Featurization
+
+The engine now uses genuine molecular featurization rather than one-hot categorical
+encoding. Featurization is fixed, deterministic, versioned infrastructure — it is
+not an agent-editable search-strategy knob.
+
+### What the features represent
+
+**Organic portion (chelator + targeting vector):**
+When a chemical structure (SMILES) is available for the organic parts of a construct,
+the engine computes two distinct representations:
+
+- **Descriptor vector** (8 features): molecular weight, calculated logP, topological
+  polar surface area (TPSA), hydrogen-bond donor and acceptor counts, rotatable-bond
+  count, ring count, and fraction of sp³ carbons. These are computed with RDKit and
+  used by the Gaussian-process surrogates for regression. The set is intentionally
+  small — GPs fit on very few observations, and a high-dimensional representation
+  would overfit.
+
+- **Morgan fingerprint** (2048 bits, radius 2): a binary substructure fingerprint used
+  for Tanimoto-based diversity selection in the policy. Two proposed constructs are
+  considered structurally similar if their Tanimoto distance is below the diversity
+  threshold.
+
+**Radionuclide:**
+Represented separately by three factual physics features: atomic number (from RDKit's
+periodic table), half-life in days (from the project's single `HALF_LIFE_DAYS` source),
+and primary decay mode encoded as an integer (0 = β⁻, 1 = α, 2 = EC/β⁺), sourced
+from the IAEA Live Chart of Nuclides.
+
+**Structure resolution:** structures are resolved from (a) a SMILES string provided
+directly on the construct or its building blocks, or (b) the building-block registry
+(`autoradionuclide/featurization/registry.py`) which currently holds verified SMILES
+for DOTA (PubChem CID 129730), NOTA (PubChem CID 5460477), and DOTAGA
+(Simecek et al. EJNMMI Res 2012). When no structure can be resolved, the feature
+record is flagged `FALLBACK` and its descriptor vector and fingerprint are explicit
+zeros — the system does not fabricate values.
+
+### What the features do NOT represent
+
+**Metal coordination chemistry is not modeled.** The metal-organic bond between
+the radionuclide and the chelator — its geometry, thermodynamic stability, kinetic
+inertness, and transmetallation susceptibility — is not represented by these 2D
+organic-molecule features.
+
+**Radiation effects are not captured.** The energy and type of emitted particles
+(β⁻, α, γ, Auger electrons), the linear energy transfer (LET), the dose profile in
+tissue, and the capacity of high-LET particles to cause double-strand DNA breaks are
+not encoded in any descriptor or fingerprint.
+
+**Large-peptide 3D conformation is not represented.** Standard 2D physicochemical
+descriptors and Morgan fingerprints were designed for drug-like small molecules.
+They do not capture backbone geometry, secondary structure, or the spatial arrangement
+of a large peptide targeting vector such as DOTATATE or PSMA-I&T.
+
+**A note on macrocyclic chelators and Morgan fingerprints:** DOTA and NOTA produce
+identical binary Morgan fingerprints at radius 2. Both macrocycles share all atom
+environments visible at that radius (N-CH₂-COOH in a macrocyclic context). Ring-size
+differences between DOTA (12-membered) and NOTA (9-membered) require a higher radius
+to distinguish. This is a known property of Morgan fingerprints for macrocyclic
+compounds and is documented in the test suite.
+
+### What the benchmark measures after this change
+
+The retrospective benchmark is scored entirely by the frozen heuristic scoring
+functions (`frozen/harness.py`), which do not consume these features. The benchmark
+number is **expected to be essentially unchanged** — and it is (0.571 vs. baseline
+0.444, same as before featurization). The gain from this change is a more honest and
+capable internal representation for the surrogates and diversity selection, not a
+higher benchmark score.
+
+---
+
 ## Placeholders — Honest Limits
 
 Every scoring function that lacks a validated predictive model is:
@@ -127,16 +208,20 @@ Every scoring function that lacks a validated predictive model is:
 2. Documented with `PLACEHOLDER` in its docstring
 3. Listed here
 
-| Function | Location | Type | Limitation |
+| Function / Component | Location | Type | Limitation |
 |---|---|---|---|
 | `score_binding_affinity` | `frozen/harness.py` | HEURISTIC | Lookup table of target validation scores; not a trained affinity model |
 | `score_chelator_stability` | `frozen/harness.py` | HEURISTIC | Expert-encoded compatibility table; no DFT or thermodynamic calculation |
 | `score_synthetic_feasibility` | `frozen/harness.py` | HEURISTIC | Vector-type lookup; not SAScore or RetroStar |
 | `score_selectivity` | `frozen/harness.py` | HEURISTIC | Target + chelator lookup; no proteome-wide off-target model |
 | `score_half_life_compatibility` | `frozen/harness.py` | PHYSICS | Uses factual IAEA half-life values; therapy suitability formula is heuristic |
-| GP surrogate predictions | `autoradionuclide/surrogates/gp_surrogate.py` | LEARNED | Fitted on stub-simulated data; not real biodistribution measurements |
+| GP surrogate predictions | `autoradionuclide/surrogates/gp_surrogate.py` | LEARNED | Fitted on RDKit descriptors from stub-simulated data; not real biodistribution |
 | `StubWetLab` results | `frozen/stub.py` | PLACEHOLDER | Returns frozen-harness scores + Gaussian noise; no real radiochemistry |
 | Benchmark numeric labels | `frozen/benchmark.json` | ILLUSTRATIVE | Qualitative (approved/clinical/failed) only; no real IC50/Ki values |
+| Building-block SMILES registry | `autoradionuclide/featurization/registry.py` | REFERENCE | Three chelators (DOTA, NOTA, DOTAGA) from PubChem / literature; targeting-vector SMILES not yet populated; PSMA bifunctional chelator omitted pending verification |
+| Isotope decay-mode data | `autoradionuclide/featurization/isotope_data.py` | REFERENCE | Primary decay modes from IAEA Live Chart of Nuclides; Bi-213 encoded as β⁻ (its direct decay) even though its α-emitting Po-213 daughter drives therapy |
+| Organic feature descriptors | `autoradionuclide/featurization/featurizer.py` | COMPUTED | Standard 2D RDKit descriptors; metal coordination, radiation effects, and 3D conformation NOT modeled |
+| Morgan fingerprint diversity | `autoradionuclide/policy/acquisition.py` | COMPUTED | Tanimoto distance over 2048-bit Morgan-2 fingerprints; DOTA and NOTA have identical fingerprints at this radius (macrocycle ring-size invisible to radius-2 Morgan) |
 
 ### What the benchmark does and does NOT establish
 

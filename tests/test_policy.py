@@ -32,10 +32,27 @@ def make_construct(
 
 
 def make_diverse_constructs() -> list[CandidateConstruct]:
-    """Create a set of constructs with different feature vectors."""
+    """Create a set of constructs with three fingerprint-distinct chelator groups.
+
+    NOTA and DOTA produce identical Morgan-2 fingerprints because their macrocyclic
+    rings share all radius-2 atom environments. To test three-way diversity, c2 uses
+    an explicit chelator SMILES (EDTA, PubChem CID 6049) which is acyclic and
+    fingerprint-distinct from both DOTA and DOTAGA. The chelator chemistry is
+    irrelevant to the diversity-policy test; the fingerprint separation is what matters.
+    """
+    # EDTA: ethylenediaminetetraacetic acid, PubChem CID 6049.
+    # Acyclic polyaminocarboxylic acid — distinct Morgan-2 fingerprint from DOTA-family.
+    _edta_smiles = "OC(=O)CN(CCN(CC(=O)O)CC(=O)O)CC(=O)O"
     return [
         make_construct("PSMA", "DOTA", "small_molecule", Radionuclide.LU177, name="c1"),
-        make_construct("SSTR2", "NOTA", "peptide", Radionuclide.GA68, name="c2"),
+        CandidateConstruct(
+            name="c2",
+            targeting_vector=TargetingVector(
+                name="SSTR2-vector", target="SSTR2", vector_type="peptide"
+            ),
+            chelator=Chelator(name="EDTA-test", smiles=_edta_smiles),
+            radionuclide=Radionuclide.GA68,
+        ),
         make_construct("FAP", "DOTAGA", "small_molecule", Radionuclide.AC225, name="c3"),
         make_construct("integrin_avb3", "DOTA", "peptide", Radionuclide.Y90, name="c4"),
         make_construct("NET", "DOTA", "small_molecule", Radionuclide.I131, name="c5"),
