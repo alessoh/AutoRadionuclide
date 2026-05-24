@@ -80,14 +80,6 @@ def featurize(construct: CandidateConstruct) -> FeatureRecord:
     smiles, quality, unresolved, reasons = resolve_organic_smiles(construct)
 
     if quality is FeatureQuality.FALLBACK:
-        warnings.warn(
-            f"Construct '{construct.name}' ({construct.id}): no organic structure "
-            f"resolved. Feature record quality=FALLBACK. Unresolved: {unresolved}. "
-            "Descriptor vector and fingerprint are explicit zeros and must not be "
-            "used for GP regression.",
-            UserWarning,
-            stacklevel=2,
-        )
         descriptor_vector = np.zeros(len(DESCRIPTOR_NAMES), dtype=float)
         fingerprint = np.zeros(FINGERPRINT_NBITS, dtype=np.uint8)
     else:

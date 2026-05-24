@@ -116,3 +116,32 @@ The 7-day divisor was chosen so that Lu-177 (6.65 d) and I-131 (8.02 d) score ne
 4–14 days: long enough to allow biodistribution but short enough to limit unnecessary
 dose. This formula is labeled PHYSICS in the source tag but the 7-day threshold
 is itself a heuristic judgment; see `frozen/harness.py` for the explicit caveat.
+
+## D13: Registry stores the standalone building-block moiety, not the conjugate
+
+Each entry in `autoradionuclide/featurization/registry.py` stores the SMILES for
+the standalone building block — the chelator or targeting vector alone — without the
+covalent linker to the other part. When both parts resolve, the featurizer combines
+them with the SMILES "." (disconnected fragment) notation. This avoids double-counting
+the chelator's contribution when both chelator and targeting vector are present, and
+keeps each registry entry verifiable against a single cited structure. The consequence
+is that the combined descriptor vector represents the chelator plus the targeting vector
+as separate fragments in the same molecular graph, which is an approximation: the
+covalent bond between parts is not modeled. The quality flag (PARTIAL when only some
+parts resolved, FULL when all resolved) records this incompleteness in every FeatureRecord.
+
+MIBG is a special case: the chelator is "none" (direct iodination, no separate chelator
+moiety), so the MIBG targeting-vector SMILES IS the complete organic molecule and the
+disconnected-fragment approximation does not apply.
+
+## D14: Per-building-block warning deduplication prevents log spam
+
+When the registry cannot resolve a building-block name, a UserWarning is emitted.
+In a campaign with many constructs sharing the same unresolved targeting vector (e.g.
+"PSMA-617" not yet in the registry), the old per-construct warning fired once per
+construct — potentially hundreds of times, drowning out other diagnostics. The new
+system fires once per unique `"kind:name"` key per Python session. A module-level set
+(`_warned_registry_misses`) tracks which keys have already warned. Tests that assert
+on warning counts must call `reset_registry_warning_state()` at the start to clear this
+state, since a name seen in a prior test would otherwise suppress the warning in the
+test under examination.

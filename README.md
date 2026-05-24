@@ -161,10 +161,28 @@ from the IAEA Live Chart of Nuclides.
 **Structure resolution:** structures are resolved from (a) a SMILES string provided
 directly on the construct or its building blocks, or (b) the building-block registry
 (`autoradionuclide/featurization/registry.py`) which currently holds verified SMILES
-for DOTA (PubChem CID 129730), NOTA (PubChem CID 5460477), and DOTAGA
-(Simecek et al. EJNMMI Res 2012). When no structure can be resolved, the feature
-record is flagged `FALLBACK` and its descriptor vector and fingerprint are explicit
-zeros — the system does not fabricate values.
+for DOTA (PubChem CID 129730), NOTA (PubChem CID 5460477), DOTAGA
+(Simecek et al. EJNMMI Res 2012), and MIBG / iobenguane (PubChem CID 60860).
+When no structure can be resolved, the feature record is flagged `FALLBACK` and its
+descriptor vector and fingerprint are explicit zeros — the system does not fabricate values.
+
+**Registry convention:** each entry stores the *standalone* building-block moiety
+without the covalent linker to other parts. When both chelator and targeting vector
+resolve, the featurizer combines them via the SMILES "." (disconnected fragment)
+notation — an approximation that captures the parts' physicochemical contributions
+but does not model the covalent bond between them. The quality flag (`PARTIAL` /
+`FULL`) on every `FeatureRecord` documents which parts were resolved.
+
+**Deliberate FALLBACK entries** (known building blocks not yet in the registry, with reason):
+
+| Building block | Reason not included |
+|---|---|
+| DOTATATE (Tyr³-octreotate) | Large octapeptide; standalone SMILES needs expert verification |
+| DOTATOC (Tyr³-octreotide) | Large octapeptide; standalone SMILES needs expert verification |
+| PSMA-617 targeting vector | Bifunctional urea pharmacophore; standalone fragment needs verification |
+| FAPI-46 | Small-molecule FAP inhibitor; standalone SMILES needs verification |
+| FAPI-74 | Small-molecule FAP inhibitor; standalone SMILES needs verification |
+| PSMA-I&T targeting vector | Bifunctional conjugate; standalone fragment needs verification |
 
 ### What the features do NOT represent
 
@@ -218,7 +236,7 @@ Every scoring function that lacks a validated predictive model is:
 | GP surrogate predictions | `autoradionuclide/surrogates/gp_surrogate.py` | LEARNED | Fitted on RDKit descriptors from stub-simulated data; not real biodistribution |
 | `StubWetLab` results | `frozen/stub.py` | PLACEHOLDER | Returns frozen-harness scores + Gaussian noise; no real radiochemistry |
 | Benchmark numeric labels | `frozen/benchmark.json` | ILLUSTRATIVE | Qualitative (approved/clinical/failed) only; no real IC50/Ki values |
-| Building-block SMILES registry | `autoradionuclide/featurization/registry.py` | REFERENCE | Three chelators (DOTA, NOTA, DOTAGA) from PubChem / literature; targeting-vector SMILES not yet populated; PSMA bifunctional chelator omitted pending verification |
+| Building-block SMILES registry | `autoradionuclide/featurization/registry.py` | REFERENCE | Three chelators (DOTA, NOTA, DOTAGA) and one targeting vector (MIBG) from PubChem / literature; large peptide vectors (DOTATATE, DOTATOC, PSMA-617, FAPI-46/74) omitted pending independent verification |
 | Isotope decay-mode data | `autoradionuclide/featurization/isotope_data.py` | REFERENCE | Primary decay modes from IAEA Live Chart of Nuclides; Bi-213 encoded as β⁻ (its direct decay) even though its α-emitting Po-213 daughter drives therapy |
 | Organic feature descriptors | `autoradionuclide/featurization/featurizer.py` | COMPUTED | Standard 2D RDKit descriptors; metal coordination, radiation effects, and 3D conformation NOT modeled |
 | Morgan fingerprint diversity | `autoradionuclide/policy/acquisition.py` | COMPUTED | Tanimoto distance over 2048-bit Morgan-2 fingerprints; DOTA and NOTA have identical fingerprints at this radius (macrocycle ring-size invisible to radius-2 Morgan) |

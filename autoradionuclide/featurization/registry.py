@@ -1,11 +1,19 @@
 """
 SMILES registry for known radioligand building blocks.
 
+Convention: Each registry entry stores the STANDALONE building-block moiety,
+WITHOUT the conjugated chelator or covalent linker to other parts. The featurizer
+combines parts via disconnected SMILES ("." separator) to get approximate
+physicochemical descriptors for the resolved organic portion. This avoids
+double-counting the chelator contribution when both chelator and targeting vector
+are present.
+
 Rules enforced in this file:
 1. Only include structures with publicly verifiable SMILES. Cite source per entry.
-2. Never fabricate a SMILES. If a structure is uncertain, omit it and let the
+2. Include the expected molecular formula; cross-check with RDKit at entry creation.
+3. Never fabricate a SMILES. If a structure is uncertain, omit it and let the
    quality flag record the unresolved status.
-3. New entries must include a source annotation in the adjacent comment.
+4. New entries must include smiles, formula, and source keys.
 
 Structure resolution priority (see ``resolve_organic_smiles``):
   1. Full construct SMILES from ``construct.smiles`` (if provided)
@@ -15,52 +23,124 @@ Structure resolution priority (see ``resolve_organic_smiles``):
 """
 from __future__ import annotations
 
+import warnings
+
 from autoradionuclide.domain.models import CandidateConstruct
 from autoradionuclide.featurization._types import FeatureQuality
 
 
 # ---------------------------------------------------------------------------
 # Chelator registry
+# Each entry carries smiles, formula (verified with RDKit), and source citation.
 # All structures verified against PubChem or cited literature.
 # ---------------------------------------------------------------------------
 
-# DOTA: 1,4,7,10-tetraazacyclododecane-1,4,7,10-tetraacetic acid
-#   PubChem CID 129730
-#   12-membered ring (4 N + 8 CH₂), four -CH₂COOH arms
-_DOTA_SMILES = "OC(=O)CN1CCN(CC(=O)O)CCN(CC(=O)O)CCN(CC(=O)O)CC1"
-
-# NOTA: 1,4,7-triazacyclononane-1,4,7-triacetic acid
-#   PubChem CID 5460477
-#   9-membered ring (3 N + 6 CH₂), three -CH₂COOH arms
-_NOTA_SMILES = "OC(=O)CN1CCN(CC(=O)O)CCN(CC(=O)O)CC1"
-
-# DOTAGA: 2-(4,7,10-tris(carboxymethyl)-1,4,7,10-tetraazacyclododec-1-yl)pentanedioic acid
-#   Simecek et al. EJNMMI Res 2012, doi:10.1186/2191-219X-2-17
-#   Same 12-membered ring as DOTA; N1 bears the glutaric-acid arm
-#   (HOOC-CH(N-ring)-CH₂-CH₂-COOH) instead of an acetic arm.
-_DOTAGA_SMILES = "OC(=O)C(N1CCN(CC(=O)O)CCN(CC(=O)O)CCN(CC(=O)O)CC1)CCC(=O)O"
-
-CHELATOR_SMILES: dict[str, str] = {
-    "DOTA": _DOTA_SMILES,
-    "NOTA": _NOTA_SMILES,
-    "DOTAGA": _DOTAGA_SMILES,
-    # "PSMA" chelator (bifunctional PSMA-617) omitted: the SMILES of the full
+_CHELATOR_REGISTRY: dict[str, dict[str, str]] = {
+    # DOTA: 1,4,7,10-tetraazacyclododecane-1,4,7,10-tetraacetic acid
+    #   12-membered ring (4 N + 8 CH₂), four -CH₂COOH arms.
+    "DOTA": {
+        "smiles": "OC(=O)CN1CCN(CC(=O)O)CCN(CC(=O)O)CCN(CC(=O)O)CC1",
+        "formula": "C16H28N4O8",
+        "source": "PubChem CID 129730",
+    },
+    # NOTA: 1,4,7-triazacyclononane-1,4,7-triacetic acid
+    #   9-membered ring (3 N + 6 CH₂), three -CH₂COOH arms.
+    "NOTA": {
+        "smiles": "OC(=O)CN1CCN(CC(=O)O)CCN(CC(=O)O)CC1",
+        "formula": "C12H21N3O6",
+        "source": "PubChem CID 5460477",
+    },
+    # DOTAGA: 2-(4,7,10-tris(carboxymethyl)-1,4,7,10-tetraazacyclododec-1-yl)pentanedioic acid
+    #   Same 12-membered ring as DOTA; N1 bears the glutaric-acid arm
+    #   (HOOC-CH(N-ring)-CH₂-CH₂-COOH) instead of an acetic arm.
+    "DOTAGA": {
+        "smiles": "OC(=O)C(N1CCN(CC(=O)O)CCN(CC(=O)O)CCN(CC(=O)O)CC1)CCC(=O)O",
+        "formula": "C19H32N4O10",
+        "source": "Simecek et al. EJNMMI Res 2012, doi:10.1186/2191-219X-2-17",
+    },
+    # PSMA chelator (bifunctional PSMA-617) omitted: the SMILES of the full
     # bifunctional molecule includes the targeting urea pharmacophore as well as
     # the chelation functionality. Including only the chelation portion would
-    # misrepresent the structure; the full molecule SMILES needs independent
-    # verification before inclusion. Add with source citation when available.
+    # misrepresent the structure; the full molecule needs independent verification.
+    # Add with source citation and verified formula when available.
 }
 
 
 # ---------------------------------------------------------------------------
 # Targeting-vector registry
-# Most clinical targeting vectors are large, complex peptides or small molecules
-# whose verified SMILES require careful sourcing. Entries will be added as
-# structures are verified; the registry is intentionally left sparse.
+# Each entry carries smiles, formula (verified with RDKit), and source citation.
+#
+# Convention: store the STANDALONE moiety WITHOUT conjugated chelator.
+#
+# Most clinical targeting vectors (DOTATATE, DOTATOC, PSMA-617, FAPI-46,
+# FAPI-74) are large peptides or bifunctional conjugates whose standalone
+# SMILES require independent expert verification. Until verified, constructs
+# using those vectors are PARTIAL (if the chelator resolves) or FALLBACK.
 # ---------------------------------------------------------------------------
-TARGETING_VECTOR_SMILES: dict[str, str] = {
-    # No entries. Add with source citations as structures are verified.
+
+_TARGETING_VECTOR_REGISTRY: dict[str, dict[str, str]] = {
+    # MIBG: meta-iodobenzylguanidine (iobenguane)
+    #   Small-molecule norepinephrine transporter (NET) ligand; no chelator —
+    #   the iodine is attached directly to the aromatic ring.
+    #   Clinical use: I-131 MIBG therapy (Azedra), I-123 MIBG imaging.
+    "MIBG": {
+        "smiles": "NC(=N)NCc1cccc(I)c1",
+        "formula": "C8H10IN3",
+        "source": "PubChem CID 60860 (iobenguane)",
+    },
 }
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible flat views
+# These expose the same interface as the original CHELATOR_SMILES /
+# TARGETING_VECTOR_SMILES dicts that external consumers and tests reference.
+# ---------------------------------------------------------------------------
+
+CHELATOR_SMILES: dict[str, str] = {
+    name: entry["smiles"] for name, entry in _CHELATOR_REGISTRY.items()
+}
+
+TARGETING_VECTOR_SMILES: dict[str, str] = {
+    name: entry["smiles"] for name, entry in _TARGETING_VECTOR_REGISTRY.items()
+}
+
+
+# ---------------------------------------------------------------------------
+# Warning deduplication
+# Each unresolved building block emits exactly one UserWarning per Python
+# session, keyed on "kind:name". Tests must call reset_registry_warning_state()
+# for isolation so that a name seen in a prior test does not suppress a warning
+# in a later test that asserts on warning counts.
+# ---------------------------------------------------------------------------
+
+_warned_registry_misses: set[str] = set()
+
+
+def reset_registry_warning_state() -> None:
+    """Clear the per-building-block warning deduplication state.
+
+    Call this at the start of any test that asserts on UserWarning counts from
+    registry resolution. Without resetting, a name already seen in a prior test
+    will not re-fire its warning.
+    """
+    _warned_registry_misses.clear()
+
+
+def _warn_missing_building_block(kind: str, name: str) -> None:
+    """Emit a UserWarning the first time a building-block name is unresolved."""
+    key = f"{kind}:{name}"
+    if key in _warned_registry_misses:
+        return
+    _warned_registry_misses.add(key)
+    warnings.warn(
+        f"Building block '{name}' (kind={kind}) not found in registry. "
+        "Feature record quality will be FALLBACK or PARTIAL for constructs "
+        f"that use this {kind}. Add a verified SMILES entry with a source "
+        "citation to registry.py to enable structure-based featurization.",
+        UserWarning,
+        stacklevel=4,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +206,7 @@ def _resolve_chelator(
         reasons["chelator"] = f"registry:{name}"
         return CHELATOR_SMILES[name]
 
+    _warn_missing_building_block("chelator", name)
     reasons["chelator"] = f"unresolved:not_in_registry:{name}"
     unresolved.append("chelator")
     return None
@@ -146,6 +227,7 @@ def _resolve_vector(
         reasons["targeting_vector"] = f"registry:{name}"
         return TARGETING_VECTOR_SMILES[name]
 
+    _warn_missing_building_block("targeting_vector", name)
     reasons["targeting_vector"] = f"unresolved:not_in_registry:{name}"
     unresolved.append("targeting_vector")
     return None

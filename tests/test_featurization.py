@@ -33,7 +33,12 @@ from autoradionuclide.featurization import (
     featurize,
     tanimoto_distance,
 )
-from autoradionuclide.featurization.registry import CHELATOR_SMILES
+from autoradionuclide.featurization.registry import (
+    CHELATOR_SMILES,
+    _CHELATOR_REGISTRY,
+    _TARGETING_VECTOR_REGISTRY,
+    reset_registry_warning_state,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +142,199 @@ class TestRegistry:
 
 
 # ---------------------------------------------------------------------------
+# Registry formula verification
+# ---------------------------------------------------------------------------
+
+class TestRegistryFormulas:
+    """Every registry entry's SMILES must parse and its formula must match."""
+
+    def test_chelator_formulas(self):
+        """All chelator SMILES must parse and produce the stored molecular formula."""
+        from rdkit import Chem
+        from rdkit.Chem import rdMolDescriptors
+        for name, entry in _CHELATOR_REGISTRY.items():
+            mol = Chem.MolFromSmiles(entry["smiles"])
+            assert mol is not None, f"{name}: SMILES failed to parse"
+            computed = rdMolDescriptors.CalcMolFormula(mol)
+            assert computed == entry["formula"], (
+                f"{name}: computed formula {computed!r} != stored {entry['formula']!r} "
+                f"(source: {entry['source']})"
+            )
+
+    def test_targeting_vector_formulas(self):
+        """All targeting-vector SMILES must parse and produce the stored formula."""
+        from rdkit import Chem
+        from rdkit.Chem import rdMolDescriptors
+        for name, entry in _TARGETING_VECTOR_REGISTRY.items():
+            mol = Chem.MolFromSmiles(entry["smiles"])
+            assert mol is not None, f"{name}: SMILES failed to parse"
+            computed = rdMolDescriptors.CalcMolFormula(mol)
+            assert computed == entry["formula"], (
+                f"{name}: computed formula {computed!r} != stored {entry['formula']!r} "
+                f"(source: {entry['source']})"
+            )
+
+    def test_mibg_molecular_weight(self):
+        """MIBG MW should be ~275 Da (C8H10IN3, PubChem CID 60860)."""
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+        from autoradionuclide.featurization.registry import TARGETING_VECTOR_SMILES
+        mol = Chem.MolFromSmiles(TARGETING_VECTOR_SMILES["MIBG"])
+        mw = Descriptors.MolWt(mol)
+        assert 270.0 < mw < 280.0, f"MIBG MW {mw:.1f} outside expected range"
+
+
+# ---------------------------------------------------------------------------
+# Registry expansion: MIBG and PSMA-campaign resolution
+# ---------------------------------------------------------------------------
+
+class TestRegistryExpansion:
+    """Tests for building blocks added in the registry expansion."""
+
+    def test_mibg_resolves_to_full(self):
+        """MIBG (chelator='none', vector='MIBG') must resolve to FULL quality."""
+        reset_registry_warning_state()
+        c = CandidateConstruct(
+            name="mibg-i131",
+            targeting_vector=TargetingVector(
+                name="MIBG", target="NET", vector_type="small_molecule"
+            ),
+            chelator=Chelator(name="none"),
+            radionuclide=Radionuclide.I131,
+        )
+        record = featurize(c)
+        assert record.quality is FeatureQuality.FULL
+        assert record.unresolved_parts == []
+        assert np.any(record.descriptor_vector != 0.0)
+        assert record.fingerprint.sum() > 0
+
+    def test_mibg_descriptor_vector_physically_reasonable(self):
+        """MIBG descriptor vector must reflect a small iodinated molecule."""
+        from autoradionuclide.featurization import DESCRIPTOR_NAMES
+        reset_registry_warning_state()
+        c = CandidateConstruct(
+            name="mibg-i131",
+            targeting_vector=TargetingVector(
+                name="MIBG", target="NET", vector_type="small_molecule"
+            ),
+            chelator=Chelator(name="none"),
+            radionuclide=Radionuclide.I131,
+        )
+        record = featurize(c)
+        mw = record.descriptor_vector[DESCRIPTOR_NAMES.index("mw")]
+        assert 250.0 < mw < 300.0, f"MIBG MW descriptor={mw:.1f}, expected ~275"
+
+    def test_psma_campaign_constructs_resolve_to_partial(self):
+        """Constructs with DOTA/NOTA/DOTAGA chelator resolve to PARTIAL, not FALLBACK."""
+        reset_registry_warning_state()
+        for chelator_name in ("DOTA", "NOTA", "DOTAGA"):
+            c = CandidateConstruct(
+                name=f"psma-{chelator_name.lower()}-lu177",
+                targeting_vector=TargetingVector(
+                    name="PSMA-617",
+                    target="PSMA",
+                    vector_type="small_molecule",
+                ),
+                chelator=Chelator(name=chelator_name),
+                radionuclide=Radionuclide.LU177,
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter("always")
+                record = featurize(c)
+            assert record.quality is FeatureQuality.PARTIAL, (
+                f"{chelator_name}: expected PARTIAL, got {record.quality}"
+            )
+            assert "chelator" not in record.unresolved_parts
+            assert np.any(record.descriptor_vector != 0.0)
+
+    def test_psma_campaign_constructs_have_nonzero_fingerprint(self):
+        """PARTIAL constructs (chelator resolved) must have non-zero fingerprints."""
+        reset_registry_warning_state()
+        for chelator_name in ("DOTA", "NOTA", "DOTAGA"):
+            c = CandidateConstruct(
+                name=f"fp-{chelator_name.lower()}",
+                targeting_vector=TargetingVector(
+                    name="PSMA-617", target="PSMA", vector_type="small_molecule"
+                ),
+                chelator=Chelator(name=chelator_name),
+                radionuclide=Radionuclide.LU177,
+            )
+            with warnings.catch_warnings(record=True):
+                warnings.simplefilter("always")
+                record = featurize(c)
+            assert record.fingerprint.sum() > 0, (
+                f"{chelator_name}: fingerprint is all zeros for PARTIAL construct"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Warning deduplication
+# ---------------------------------------------------------------------------
+
+class TestWarningDeduplication:
+    """The per-building-block warning must fire once per unique name, not per instance."""
+
+    def test_repeated_same_missing_block_warns_once_each(self):
+        """Three constructs sharing the same two missing parts produce 2 warnings total."""
+        reset_registry_warning_state()
+        constructs = [_make_fallback_construct(f"c{i}") for i in range(3)]
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            for c in constructs:
+                featurize(c)
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        # _make_fallback_construct uses 2 unique missing names → 2 unique keys
+        assert len(user_warnings) == 2, (
+            f"Expected 2 warnings (one per unique missing block), "
+            f"got {len(user_warnings)}: {[str(x.message) for x in user_warnings]}"
+        )
+
+    def test_different_missing_blocks_warn_independently(self):
+        """Two constructs with different unresolved names each fire their own warning."""
+        reset_registry_warning_state()
+        c1 = CandidateConstruct(
+            name="c1",
+            targeting_vector=TargetingVector(
+                name="vector-alpha-unique", target="X", vector_type="peptide"
+            ),
+            chelator=Chelator(name="chelator-alpha-unique"),
+            radionuclide=Radionuclide.LU177,
+        )
+        c2 = CandidateConstruct(
+            name="c2",
+            targeting_vector=TargetingVector(
+                name="vector-beta-unique", target="Y", vector_type="peptide"
+            ),
+            chelator=Chelator(name="chelator-beta-unique"),
+            radionuclide=Radionuclide.LU177,
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            featurize(c1)
+            featurize(c2)
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        # 2 chelator misses + 2 vector misses = 4 distinct keys = 4 warnings
+        assert len(user_warnings) == 4, (
+            f"Expected 4 warnings (2 chelator + 2 vector misses), "
+            f"got {len(user_warnings)}"
+        )
+
+    def test_second_featurize_of_same_fallback_no_new_warnings(self):
+        """Featurizing the same fallback construct twice produces no duplicate warnings."""
+        reset_registry_warning_state()
+        c = _make_fallback_construct("dup-test")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            featurize(c)
+            featurize(c)  # second call should not re-warn
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        # Both missing blocks warned on first call only
+        assert len(user_warnings) == 2, (
+            f"Expected 2 warnings total (not 4), got {len(user_warnings)}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Feature record: quality and structure
 # ---------------------------------------------------------------------------
 
@@ -220,7 +418,8 @@ class TestFallback:
         assert record.quality is FeatureQuality.FALLBACK
 
     def test_fallback_emits_warning(self):
-        """Fallback must emit a UserWarning."""
+        """Fallback must emit a UserWarning per unique unresolved building block."""
+        reset_registry_warning_state()
         c = _make_fallback_construct()
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
