@@ -21,3 +21,16 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Generated / runtime files
+*.db
+*.db-shm
+*.db-wal
