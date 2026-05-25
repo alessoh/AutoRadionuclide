@@ -1,0 +1,268 @@
+{
+  "meta": {
+    "campaign_id": "mibg-net-demo-001",
+    "campaign_name": "MIBG/NET Flagship Demo Campaign",
+    "run_id": "16140108",
+    "run_started_at": "2026-05-25T22:06:31.266720+00:00",
+    "export_generated_at": "2026-05-25T23:10:52.002252+00:00",
+    "export_script": "scripts/export_run.py"
+  },
+  "construct": {
+    "name": "MIBG-none-0",
+    "targeting_vector": "MIBG",
+    "chelator": "none",
+    "isotope": "I-131",
+    "smiles": "NC(=N)NCc1cccc(I)c1",
+    "formula": "C8H10IN3",
+    "registry_source": "PubChem CID 60860 (iobenguane)",
+    "clinical_name": "iobenguane (Azedra)",
+    "mechanism": "Norepinephrine transporter (NET) ligand; directly radioiodinated",
+    "featurization": {
+      "quality": "full",
+      "featurizer_version": "1.0.0",
+      "rdkit_version": "2026.03.2",
+      "descriptor_names": [
+        "mw",
+        "logp",
+        "tpsa",
+        "hbd",
+        "hba",
+        "rotbonds",
+        "rings",
+        "frac_csp3"
+      ],
+      "descriptors": {
+        "mw": 275.093,
+        "logp": 1.2743,
+        "tpsa": 61.9,
+        "hbd": 3.0,
+        "hba": 1.0,
+        "rotbonds": 2.0,
+        "rings": 1.0,
+        "frac_csp3": 0.125
+      },
+      "fingerprint_bits": 28,
+      "fingerprint_params": {
+        "radius": 2,
+        "n_bits": 2048
+      },
+      "resolution_reasons": {
+        "chelator": "no_chelator_direct_labelling",
+        "targeting_vector": "registry:MIBG"
+      },
+      "isotope_features": {
+        "atomic_number": 53,
+        "half_life_days": 8.02,
+        "decay_mode_encoded": 0
+      }
+    },
+    "objectives": {
+      "binding_affinity": 0.75,
+      "chelator_stability": 0.9,
+      "half_life_compatibility": 1.0,
+      "synthetic_feasibility": 0.8,
+      "selectivity": 0.8,
+      "aggregate": 0.838462
+    },
+    "stub_results": {
+      "binding_affinity": {
+        "value": 0.737206,
+        "uncertainty": 0.112794,
+        "passed": true
+      },
+      "chelator_stability": {
+        "value": 0.925572,
+        "uncertainty": 0.105572,
+        "passed": true
+      },
+      "half_life_compatibility": {
+        "value": 0.988695,
+        "uncertainty": 0.011305,
+        "passed": true
+      },
+      "synthetic_feasibility": {
+        "value": 0.784247,
+        "uncertainty": 0.135753,
+        "passed": true
+      },
+      "selectivity": {
+        "value": 0.753499,
+        "uncertainty": 0.196501,
+        "passed": true
+      }
+    }
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "cycle_id": "278d0747",
+      "cycle_number": 0,
+      "constructs_proposed": 1,
+      "constructs_selected": 1,
+      "score_before": 0.0,
+      "score_after": 0.837844,
+      "score_delta": 0.837844,
+      "strategy_modification": null,
+      "kept": null,
+      "inner_loop_note": "",
+      "started_at": "2026-05-25T22:06:31.266720Z",
+      "finished_at": "2026-05-25T22:06:31.307481Z"
+    },
+    {
+      "turn": 2,
+      "cycle_id": "1c05e81e",
+      "cycle_number": 1,
+      "constructs_proposed": 0,
+      "constructs_selected": 0,
+      "score_before": 0.837844,
+      "score_after": 0.837844,
+      "score_delta": 0.0,
+      "strategy_modification": {
+        "description": "Increase exploration weight",
+        "parameter": "exploration_weight",
+        "old_value": 1.5,
+        "new_value": 2.0,
+        "rationale": "Insufficient diversity in recent batches; higher kappa increases exploration."
+      },
+      "kept": null,
+      "inner_loop_note": "No constructs passed safety checks.",
+      "started_at": "2026-05-25T22:06:31.307481Z",
+      "finished_at": "2026-05-25T22:06:31.325195Z"
+    },
+    {
+      "turn": 3,
+      "cycle_id": "334c944e",
+      "cycle_number": 2,
+      "constructs_proposed": 0,
+      "constructs_selected": 0,
+      "score_before": 0.837844,
+      "score_after": 0.837844,
+      "score_delta": 0.0,
+      "strategy_modification": {
+        "description": "Focus on validated NET vectors",
+        "parameter": "prioritized_targets",
+        "old_value": [],
+        "new_value": [
+          "NET"
+        ],
+        "rationale": "NET targeting vectors showing strongest objective improvements."
+      },
+      "kept": null,
+      "inner_loop_note": "No constructs passed safety checks.",
+      "started_at": "2026-05-25T22:06:31.339011Z",
+      "finished_at": "2026-05-25T22:06:31.354680Z"
+    },
+    {
+      "turn": 4,
+      "cycle_id": "20fb5be3",
+      "cycle_number": 3,
+      "constructs_proposed": 0,
+      "constructs_selected": 0,
+      "score_before": 0.837844,
+      "score_after": 0.837844,
+      "score_delta": 0.0,
+      "strategy_modification": {
+        "description": "Switch acquisition function to EI",
+        "parameter": "acquisition_function",
+        "old_value": "UCB",
+        "new_value": "EI",
+        "rationale": "UCB may be over-exploring; EI focuses on high-probability improvements."
+      },
+      "kept": null,
+      "inner_loop_note": "No constructs passed safety checks.",
+      "started_at": "2026-05-25T22:06:31.366630Z",
+      "finished_at": "2026-05-25T22:06:31.370709Z"
+    }
+  ],
+  "benchmark": {
+    "rank_accuracy": 0.5714,
+    "baseline_accuracy": 0.4444,
+    "engine_hits": 4,
+    "n_positive": 7,
+    "interpretation": "Engine places 4/7 known-good agents in top 4. Random baseline: 0.44. This confirms scoring machinery ranks known-good agents above known-poor ones at a rate better than chance. NOT a validated predictive model.",
+    "rankings": [
+      {
+        "id": "psma-it-dotaga-lu177",
+        "name": "PSMA-I&T-DOTAGA-Lu177",
+        "label": "clinical",
+        "score": 0.904615,
+        "label_numeric": 0.7
+      },
+      {
+        "id": "dotatate-dota-lu177",
+        "name": "DOTATATE-DOTA-Lu177",
+        "label": "approved",
+        "score": 0.896154,
+        "label_numeric": 1.0
+      },
+      {
+        "id": "psma617-dota-lu177",
+        "name": "PSMA-617-DOTA-Lu177",
+        "label": "approved",
+        "score": 0.886923,
+        "label_numeric": 1.0
+      },
+      {
+        "id": "fapi46-dota-lu177",
+        "name": "FAPI-46-DOTA-Lu177",
+        "label": "clinical",
+        "score": 0.840769,
+        "label_numeric": 0.7
+      },
+      {
+        "id": "mibg-i131-direct",
+        "name": "MIBG-I131-direct",
+        "label": "approved",
+        "score": 0.838462,
+        "label_numeric": 1.0
+      },
+      {
+        "id": "dotatoc-dota-y90",
+        "name": "DOTATOC-DOTA-Y90",
+        "label": "clinical",
+        "score": 0.789385,
+        "label_numeric": 0.7
+      },
+      {
+        "id": "rgd-nota-ga68",
+        "name": "RGD-NOTA-Ga68",
+        "label": "clinical",
+        "score": 0.6658,
+        "label_numeric": 0.7
+      },
+      {
+        "id": "unknown1-nota-lu177",
+        "name": "Unknown1-NOTA-Lu177",
+        "label": "failed",
+        "score": 0.527692,
+        "label_numeric": 0.1
+      },
+      {
+        "id": "unknown2-dota-ga68-therapy",
+        "name": "Unknown2-DOTA-Ga68-therapy-attempt",
+        "label": "failed",
+        "score": 0.443338,
+        "label_numeric": 0.1
+      }
+    ]
+  },
+  "provenance": {
+    "model_id": "mock-deterministic-v1",
+    "featurizer_version": "1.0.0",
+    "smiles_source": "PubChem CID 60860 (iobenguane)",
+    "total_model_calls_this_run": 7,
+    "total_ledger_entries_this_run": 27,
+    "total_ledger_entries_all_runs": 212,
+    "run_id": "16140108",
+    "run_started_at": "2026-05-25T22:06:31.266720+00:00"
+  },
+  "honest_limits": [
+    "Scoring functions are frozen heuristics \u2014 not validated predictive models.",
+    "Metal coordination chemistry is NOT modeled (coordination geometry, thermodynamic stability, kinetic inertness).",
+    "Radiation dose profile (LET, \u03b2\u207b/\u03b1/Auger particle energy, DNA damage) is NOT captured.",
+    "Benchmark rank accuracy 0.57 vs. random baseline 0.44 \u2014 confirms wiring, not predictive power.",
+    "StubWetLab returns frozen-harness scores plus Gaussian noise \u2014 no real radiochemistry.",
+    "DOTA and NOTA produce identical Morgan-2 fingerprints (ring-size difference invisible at radius 2).",
+    "Large peptide targeting vectors (DOTATATE, PSMA-617, FAPI-46) omitted from registry pending independent verification."
+  ]
+}

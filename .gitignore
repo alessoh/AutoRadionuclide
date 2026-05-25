@@ -34,3 +34,8 @@ build/
 *.db
 *.db-shm
 *.db-wal
+
+# Next.js dashboard
+web/node_modules/
+web/.next/
+web/out/
