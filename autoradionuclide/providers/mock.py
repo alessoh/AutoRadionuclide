@@ -1,6 +1,6 @@
 """Deterministic mock provider — fully offline, no API key required."""
 from __future__ import annotations
-import hashlib, json, random
+import hashlib, json, random, re
 from typing import Any
 from autoradionuclide.domain.models import ModelRequest, ModelResponse, TokenUsage
 from autoradionuclide.providers.base import ModelProvider
@@ -75,15 +75,42 @@ class MockModelProvider(ModelProvider):
         for msg in request.messages:
             content = msg.get("content", "")
             if isinstance(content, str) and "propose" in content.lower():
-                import re
                 m = re.search(r"propose\s+(\d+)", content, re.I)
                 if m:
                     n = int(m.group(1))
+
+        # Parse allowed building blocks from system prompt (written by the generator).
+        # When a campaign declares its building-block space the generator adds phrases
+        # like "Only propose these targeting vectors: MIBG." to the system prompt.
+        # The mock honours them so generated candidates stay within the declared space.
+        original_system = request.system or ""
+        vectors = list(_VECTORS)
+        chelators = list(_CHELATORS)
+
+        m = re.search(r"Only propose these targeting vectors: ([^.]+)\.", original_system)
+        if m:
+            allowed = {v.strip() for v in m.group(1).split(",")}
+            filtered = [v for v in _VECTORS if v["name"] in allowed]
+            if filtered:
+                vectors = filtered
+
+        m = re.search(r"Only propose these chelators: ([^.]+)\.", original_system)
+        if m:
+            allowed = {c.strip() for c in m.group(1).split(",")}
+            filtered = [c for c in _CHELATORS if c["name"] in allowed]
+            if filtered:
+                chelators = filtered
+
         candidates = []
         for i in range(n):
-            vec = rng.choice(_VECTORS)
-            chel = rng.choice(_CHELATORS)
-            linker = rng.choice(_LINKERS)
+            vec = rng.choice(vectors)
+            chel = rng.choice(chelators)
+            # Direct labelling (chelator="none") implies no linker — there is nothing
+            # to link to when the radionuclide is bonded directly to the vector.
+            if chel["name"] == "none":
+                linker = None
+            else:
+                linker = rng.choice(_LINKERS)
             candidates.append({
                 "targeting_vector": {**vec, "smiles": None, "notes": ""},
                 "chelator": {**chel},
@@ -97,6 +124,22 @@ class MockModelProvider(ModelProvider):
         return json.dumps(candidates)
 
     def _strategy_modification(self, request: ModelRequest, rng: random.Random) -> str:
+        original_system = request.system or ""
+
+        # Parse campaign target so the "focus" option names the right target.
+        # The strategy_modification prompt template contains "targeting {target}".
+        target = "PSMA"  # default matches the legacy hardcoded value
+        m = re.search(r"targeting (\w[\w/]*)", original_system, re.I)
+        if m:
+            target = m.group(1)
+
+        # If the campaign declared an allowed-vector space, surface those vectors in
+        # the "focus" option so the suggestion stays within the declared space.
+        focus_targets = [target]
+        m = re.search(r"Only propose these targeting vectors: ([^.]+)\.", original_system)
+        if m:
+            focus_targets = [v.strip() for v in m.group(1).split(",")]
+
         options = [
             {
                 "modification_description": "Increase exploration weight",
@@ -106,11 +149,11 @@ class MockModelProvider(ModelProvider):
                 "rationale": "Insufficient diversity in recent batches; higher kappa increases exploration."
             },
             {
-                "modification_description": "Focus on validated PSMA vectors",
+                "modification_description": f"Focus on validated {target} vectors",
                 "parameter_name": "prioritized_targets",
                 "old_value": [],
-                "new_value": ["PSMA"],
-                "rationale": "PSMA targeting vectors showing strongest objective improvements."
+                "new_value": focus_targets,
+                "rationale": f"{target} targeting vectors showing strongest objective improvements."
             },
             {
                 "modification_description": "Switch acquisition function to EI",

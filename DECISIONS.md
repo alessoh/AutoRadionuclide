@@ -169,6 +169,37 @@ window where a crash could leave a partial file, and there is no risk of acciden
 deleting the wrong database. The persistent database at `spec.db_path` is never
 opened in dry-run mode.
 
+## D18: Campaign building-block space declared in spec, enforced by generator
+
+A campaign can declare its allowed building-block space via two optional fields on
+`CampaignSpec`: `allowed_vectors: list[str]` and `allowed_chelators: list[str]`.
+When non-empty, these lists are enforced at two points:
+
+1. **System prompt** — the generator appends "Only propose these targeting vectors: X."
+   and "Only propose these chelators: Y." to the system prompt, so any model provider
+   (mock or real LLM) knows the declared space before generating.
+2. **Post-filter** — the generator filters the provider's output and silently drops
+   any construct whose vector or chelator name is outside the declared set. This is a
+   hard safety net regardless of what the provider returns.
+
+The mock provider additionally parses these constraints from the system prompt and
+generates candidates only from the allowed lists (proactive compliance, not just
+reactive filtering). When `allowed_chelators=["none"]` (direct labelling), the mock
+also sets `linker=None` — there is no covalent linker on a directly radioiodinated
+compound.
+
+The strategy-modification mock is also target-aware: it parses the campaign target
+from the system prompt and generates "Focus on validated X vectors" options that name
+the actual campaign target, not a hardcoded PSMA default. For PSMA campaigns the
+content is identical to before (backward compatible); for NET/MIBG campaigns the
+suggestion is now coherent.
+
+The MIBG demo campaign (`campaigns/mibg_demo.yaml`) uses `allowed_vectors: [MIBG]`
+and `allowed_chelators: [none]`, ensuring every proposed construct resolves to FULL
+featurization quality and that no chemically nonsensical pairings (e.g. MIBG+DOTA)
+are ever generated. MIBG is directly radioiodinated and must never be paired with a
+macrocyclic chelator.
+
 ## D17: Target campaign score set to 0.99 to allow observable multi-turn runs
 
 The example PSMA campaign (`campaigns/example_psma.yaml`) and the MIBG demo

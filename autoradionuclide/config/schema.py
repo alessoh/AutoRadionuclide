@@ -45,6 +45,8 @@ class CampaignSpec(BaseModel):
     batch_size: int = 4
     db_path: str = "campaign.db"
     random_seed: int = 42
+    allowed_vectors: list[str] = Field(default_factory=list)
+    allowed_chelators: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")

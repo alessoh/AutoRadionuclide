@@ -96,18 +96,40 @@ database. The end-of-run report reflects only this run's entries.
 Every launch prints a `Run ID` that can be passed to `ar-inspect` to scope the
 report to that run only.
 
-### Run the featurization demo campaign
+### Run the flagship demo campaign
 
 ```bash
-ar-launch campaigns/mibg_demo.yaml --cycles 4
+ar-launch campaigns/mibg_demo.yaml
+ar-inspect mibg_demo.db          # most recent run (default)
 ```
 
-This campaign targets NET (neuroendocrine tumors) with MIBG (iobenguane) + I-131 —
-an established clinical radiopharmaceutical that uses direct radioiodination (no
-chelator). The MIBG SMILES is verified against PubChem CID 60860 and the chelator
-is explicitly `"none"`, giving honest FULL featurization quality. The demo is
-labeled as an engineering demonstration: the scoring functions are frozen heuristics,
-not validated predictive models.
+This is the flagship demonstration of real-structure featurization and the
+AutoResearch outer loop. **MIBG (meta-iodobenzylguanidine / iobenguane) + I-131 is a
+real targeted radiotherapy** — FDA-approved as Azedra for neuroendocrine tumours.
+MIBG is directly radioiodinated (no macrocyclic chelator). This is represented as
+`chelator="none"` in the data model and resolves to **FULL featurization quality**
+from the registry entry (PubChem CID 60860).
+
+**What a viewer should expect:**
+
+| Turn | Event |
+|------|-------|
+| 1 | MIBG + none + I-131 generated; featurizes to **FULL** quality (real RDKit descriptors and Morgan fingerprint); campaign score established (~0.838 on the heuristic objective). |
+| 2 | Outer loop proposes "Increase exploration weight"; inner cycle finds no new candidates (the only resolvable structure is already known); delta = 0, modification **reverted**. |
+| 3 | Outer loop proposes "Focus on validated **NET** vectors" (coherent — not PSMA); delta = 0, modification **reverted**. |
+| 4 | Outer loop proposes "Switch acquisition function to EI"; delta = 0, modification **reverted**. |
+
+The score plateaus honestly: there is only one unique resolvable structure in the
+declared building-block space (MIBG+none+I-131 is one molecule). The visible value is
+the keep-or-revert mechanism, not a fabricated improvement. Each turn's decision and
+rationale are recorded in the ledger.
+
+The campaign's `allowed_vectors: [MIBG]` and `allowed_chelators: [none]` fields
+constrain the generator to the declared building-block space. Zero FALLBACK registry
+warnings are emitted: every proposed construct resolves to FULL quality. MIBG is never
+paired with a macrocyclic chelator (that would misrepresent the radiochemistry).
+
+The scoring functions are frozen heuristics, not validated predictive models.
 
 ### Inspect a campaign ledger
 

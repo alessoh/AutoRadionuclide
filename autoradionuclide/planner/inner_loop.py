@@ -70,6 +70,8 @@ class InnerLoop:
             known_ids=self._known_keys,
             prioritized_targets=self._strategy.get("prioritized_targets"),
             run_id=self._run_id,
+            allowed_vectors=self._spec.allowed_vectors or None,
+            allowed_chelators=self._spec.allowed_chelators or None,
         )
 
         # 2. Score through frozen harness

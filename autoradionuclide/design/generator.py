@@ -36,13 +36,26 @@ class CandidateGenerator:
         known_ids: set[str] | None = None,
         prioritized_targets: list[str] | None = None,
         run_id: str = "",
+        allowed_vectors: list[str] | None = None,
+        allowed_chelators: list[str] | None = None,
     ) -> list[CandidateConstruct]:
-        """Ask the model provider for n candidate constructs and return validated objects."""
+        """Ask the model provider for n candidate constructs and return validated objects.
+
+        When allowed_vectors or allowed_chelators are provided, the generator
+        (a) signals the constraint to the provider via the system prompt and
+        (b) post-filters the response to enforce the declared building-block space.
+        This ensures constructs outside the declared space are never returned,
+        regardless of which provider is in use.
+        """
         system = PROMPT_TEMPLATES["generate_candidates"].format(
             target=target, isotope=isotope.value, n=n
         )
         if prioritized_targets:
             system += f" Prioritize these targets: {', '.join(prioritized_targets)}."
+        if allowed_vectors:
+            system += f" Only propose these targeting vectors: {', '.join(allowed_vectors)}."
+        if allowed_chelators:
+            system += f" Only propose these chelators: {', '.join(allowed_chelators)}."
 
         request = ModelRequest(
             model=self._provider.MODEL_ID if hasattr(self._provider, "MODEL_ID") else "unknown",
@@ -57,12 +70,19 @@ class CandidateGenerator:
 
         constructs = []
         known_ids = known_ids or set()
-        for item in raw[:n]:
+        for item in raw:
             try:
                 c = _item_to_construct(item, campaign_id, cycle_id, isotope, provenance)
+                # Enforce declared building-block space (post-filter safety net)
+                if allowed_vectors and c.targeting_vector.name not in allowed_vectors:
+                    continue
+                if allowed_chelators and c.chelator.name not in allowed_chelators:
+                    continue
                 if c.composite_key not in known_ids:
                     known_ids.add(c.composite_key)
                     constructs.append(c)
+                if len(constructs) >= n:
+                    break
             except Exception:
                 continue
 

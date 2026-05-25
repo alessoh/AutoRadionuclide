@@ -1,40 +1,57 @@
-# MIBG / NET Featurization Demo Campaign
+# MIBG / NET Flagship Demo Campaign
 #
-# PURPOSE: Engineering demonstration of the real-structure featurization path.
-# This campaign is explicitly labeled a featurization demonstration, not a
-# clinical candidate pipeline.
+# PURPOSE: Demonstration of the AutoResearch outer loop with full-quality
+# featurization. MIBG (iobenguane, PubChem CID 60860) is a real clinically
+# established NET ligand — I-131 MIBG therapy is FDA-approved as Azedra.
+# This is NOT a toy: it is a legitimate, chemistry-honest demo of the closed loop.
 #
 # CHEMISTRY REPRESENTED:
-#   - MIBG (meta-iodobenzylguanidine, iobenguane) is a clinically established
-#     NET (norepinephrine transporter) ligand used in I-131 MIBG therapy (Azedra)
-#     and I-123 MIBG imaging. It is directly radioiodinated — no macrocyclic
-#     chelator is used. This is represented as chelator="none" in the data model.
-#   - MIBG SMILES (NC(=N)NCc1cccc(I)c1) is in the registry (PubChem CID 60860),
-#     so MIBG+none+I-131 constructs resolve to FULL featurization quality.
-#   - Constructs with DOTA/NOTA/DOTAGA chelators resolve to PARTIAL quality
-#     (chelator SMILES known; targeting-vector SMILES not yet in registry).
-#   - The mock provider also generates non-MIBG vectors; those remain FALLBACK.
-#     This is expected and documented — the goal is to demonstrate that at least
-#     some constructs exercise the real descriptor and Tanimoto paths.
+#   - MIBG is directly radioiodinated (no macrocyclic chelator). This is
+#     represented as chelator="none" in the data model, which resolves MIBG
+#     to FULL featurization quality (SMILES from PubChem CID 60860).
+#   - MIBG must NEVER be paired with a macrocyclic chelator (DOTA, NOTA, etc.):
+#     that would misrepresent the radiochemistry. The campaign's declared
+#     building-block space (allowed_vectors / allowed_chelators below) enforces
+#     this constraint on every proposed construct.
+#   - With a single resolvable vector and no chelator, the campaign generates
+#     one unique construct per run. The outer loop explores strategy variations
+#     (exploration weight, acquisition function) in subsequent turns; each
+#     modification is proposed, tested, and kept or reverted with a recorded
+#     rationale. The score plateaus honestly — the value is the visible
+#     keep-or-revert mechanism, not a fabricated improvement.
 #
-# HOW TO RUN:
+# HOW TO RUN (live, recorded run):
 #   ar-launch campaigns/mibg_demo.yaml
 #   ar-inspect mibg_demo.db                    # most recent run (default)
 #   ar-inspect mibg_demo.db --all-runs         # full history across runs
 #   ar-inspect mibg_demo.db --list-runs        # see all run IDs
 #
+# WHAT A VIEWER SHOULD EXPECT:
+#   Turn 1: MIBG + none + I-131 generated; featurizes to FULL quality (real RDKit
+#           descriptors and Morgan fingerprint); campaign score established.
+#   Turns 2-4: Outer loop proposes one strategy modification per turn (e.g.,
+#              "Increase exploration weight", "Focus on validated NET vectors",
+#              "Switch acquisition function to EI"). Each modification is tested,
+#              and kept (delta > 0) or reverted (delta ≤ 0) with a rationale.
+#              Score plateaus because the only resolvable structure is already
+#              known — this is honest scientific behaviour, not a bug.
+#
 # OUTER LOOP CONFIGURATION:
 #   target_campaign_score: 0.99  (unreachable — all 4 turns will run)
 #   stall_patience: 10           (do not stop on stall within 4 turns)
-#   This lets the outer AutoResearch loop make visible keep-or-revert decisions.
 
 campaign_id: mibg-net-demo-001
-name: MIBG/NET Featurization Demo Campaign
+name: MIBG/NET Flagship Demo Campaign
 description: >
-  Engineering demonstration of real-structure featurization using the MIBG
-  targeting vector (PubChem CID 60860) and the DOTA/NOTA/DOTAGA chelator registry.
-  MIBG + direct radioiodination (chelator=none) with I-131 is the only FULL-quality
-  construct type; chelator-bearing constructs are PARTIAL. NOT a clinical pipeline.
+  Flagship demonstration of real-structure featurization and the AutoResearch
+  outer loop. MIBG (meta-iodobenzylguanidine / iobenguane, PubChem CID 60860)
+  is a clinically established NET ligand used in I-131 MIBG therapy (Azedra,
+  FDA-approved) and I-123 MIBG imaging. It is directly radioiodinated — no
+  macrocyclic chelator is used. The campaign's declared building-block space
+  (allowed_vectors: [MIBG], allowed_chelators: [none]) ensures every proposed
+  construct resolves to FULL featurization quality and that no chemically
+  nonsensical pairings (e.g. MIBG+DOTA) are ever proposed.
+  NOT a clinical pipeline — scoring functions are frozen heuristics.
 target: NET
 indication: neuroblastoma/pheochromocytoma
 isotope: I-131
@@ -44,6 +61,15 @@ model_id: mock-deterministic-v1
 batch_size: 2
 random_seed: 7
 db_path: mibg_demo.db
+
+# Declared building-block space.
+# The generator and mock provider both honour this list: only MIBG paired with
+# chelator="none" (direct radioiodination) will ever be proposed.
+# MIBG must not be paired with a macrocyclic chelator.
+allowed_vectors:
+  - MIBG
+allowed_chelators:
+  - none
 
 budget:
   max_cycles: 4

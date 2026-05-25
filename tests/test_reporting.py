@@ -13,6 +13,7 @@ from autoradionuclide.planner.inner_loop import InnerLoop
 from autoradionuclide.planner.outer_loop import OuterLoop
 from autoradionuclide.observability.inspector import inspect_campaign
 from autoradionuclide.domain.models import LedgerEntryType, Radionuclide
+from autoradionuclide.provenance.context import ProvenanceContext
 from frozen.stub import StubWetLab
 
 
@@ -382,3 +383,231 @@ class TestDemoCampaignResolution:
         # The aggregate scores must be real numbers (not all zeros)
         scores = [e.data.get("aggregate_score", 0.0) for e in score_entries]
         assert any(s > 0 for s in scores), "At least one scored construct must have score > 0"
+
+
+# ---------------------------------------------------------------------------
+# Task B: Campaign building-block space — generator respects declared space
+# ---------------------------------------------------------------------------
+
+def _make_mibg_spec(campaign_id: str = "mibg-bbs-test", db_path: str = ":memory:") -> CampaignSpec:
+    spec = CampaignSpec(
+        campaign_id=campaign_id,
+        name="MIBG Building Block Space Test",
+        target="NET",
+        isotope="I-131",
+        model_provider="mock",
+        model_id="mock-deterministic-v1",
+        batch_size=1,
+        random_seed=7,
+        db_path=db_path,
+        allowed_vectors=["MIBG"],
+        allowed_chelators=["none"],
+    )
+    spec.budget.max_cycles = 4
+    spec.budget.max_wall_minutes = 60.0
+    spec.stopping.target_campaign_score = 0.99
+    spec.stopping.stall_patience = 10
+    return spec
+
+
+class TestCampaignBuildingBlockSpace:
+    """Generator must only propose constructs within the campaign's declared space."""
+
+    def test_generator_proposes_only_declared_vectors(self):
+        """Given allowed_vectors=["MIBG"], all proposed constructs must use MIBG."""
+        spec = _make_mibg_spec()
+        ledger = LedgerStore(":memory:")
+        provider = MockModelProvider(ledger=ledger)
+        provider.set_campaign(spec.campaign_id)
+        generator = CandidateGenerator(provider=provider, ledger=ledger)
+        provenance = ProvenanceContext.from_config(
+            "mock", spec.model_dump(mode="json"), seed=spec.random_seed
+        )
+        candidates = generator.generate(
+            campaign_id=spec.campaign_id,
+            cycle_id="c1",
+            target=spec.target,
+            isotope=spec.isotope,
+            n=6,
+            provenance=provenance,
+            allowed_vectors=spec.allowed_vectors,
+            allowed_chelators=spec.allowed_chelators,
+        )
+        assert len(candidates) >= 1, "Generator produced no candidates with MIBG space declared"
+        for c in candidates:
+            assert c.targeting_vector.name in spec.allowed_vectors, (
+                f"Generator proposed vector '{c.targeting_vector.name}' "
+                f"outside declared space {spec.allowed_vectors}"
+            )
+
+    def test_generator_proposes_only_declared_chelators(self):
+        """Given allowed_chelators=["none"], all proposed constructs must use chelator 'none'."""
+        spec = _make_mibg_spec()
+        ledger = LedgerStore(":memory:")
+        provider = MockModelProvider(ledger=ledger)
+        provider.set_campaign(spec.campaign_id)
+        generator = CandidateGenerator(provider=provider, ledger=ledger)
+        provenance = ProvenanceContext.from_config(
+            "mock", spec.model_dump(mode="json"), seed=spec.random_seed
+        )
+        candidates = generator.generate(
+            campaign_id=spec.campaign_id,
+            cycle_id="c1",
+            target=spec.target,
+            isotope=spec.isotope,
+            n=6,
+            provenance=provenance,
+            allowed_vectors=spec.allowed_vectors,
+            allowed_chelators=spec.allowed_chelators,
+        )
+        assert len(candidates) >= 1
+        for c in candidates:
+            assert c.chelator.name in spec.allowed_chelators, (
+                f"Generator proposed chelator '{c.chelator.name}' "
+                f"outside declared space {spec.allowed_chelators}"
+            )
+
+    def test_unconstrained_campaign_still_generates_candidates(self):
+        """A campaign with empty allowed lists must still generate candidates (no regression)."""
+        spec = _make_spec(campaign_id="unconstrained-bbs-test", max_cycles=1)
+        ledger = LedgerStore(":memory:")
+        provider = MockModelProvider(ledger=ledger)
+        provider.set_campaign(spec.campaign_id)
+        generator = CandidateGenerator(provider=provider, ledger=ledger)
+        provenance = ProvenanceContext.from_config(
+            "mock", spec.model_dump(mode="json"), seed=spec.random_seed
+        )
+        candidates = generator.generate(
+            campaign_id=spec.campaign_id,
+            cycle_id="c1",
+            target=spec.target,
+            isotope=spec.isotope,
+            n=4,
+            provenance=provenance,
+            allowed_vectors=None,
+            allowed_chelators=None,
+        )
+        assert len(candidates) > 0, "Unconstrained generator must produce candidates"
+
+
+# ---------------------------------------------------------------------------
+# Task C: Flagship demo — MIBG campaign integration tests
+# ---------------------------------------------------------------------------
+
+class TestMIBGFlagshipDemo:
+    """End-to-end tests for the MIBG demo campaign (Tasks B, C, E)."""
+
+    def test_mibg_campaign_yields_full_quality_construct(self):
+        """MIBG + none + I-131 must resolve to FULL featurization quality."""
+        from autoradionuclide.featurization import featurize, FeatureQuality
+        from autoradionuclide.featurization.registry import reset_registry_warning_state
+
+        reset_registry_warning_state()
+        spec = _make_mibg_spec(campaign_id="mibg-full-quality-test")
+        ledger = LedgerStore(":memory:")
+        provider = MockModelProvider(ledger=ledger)
+        provider.set_campaign(spec.campaign_id)
+        generator = CandidateGenerator(provider=provider, ledger=ledger)
+        provenance = ProvenanceContext.from_config(
+            "mock", spec.model_dump(mode="json"), seed=spec.random_seed
+        )
+        candidates = generator.generate(
+            campaign_id=spec.campaign_id,
+            cycle_id="c1",
+            target=spec.target,
+            isotope=spec.isotope,
+            n=4,
+            provenance=provenance,
+            allowed_vectors=spec.allowed_vectors,
+            allowed_chelators=spec.allowed_chelators,
+        )
+        assert len(candidates) >= 1, "MIBG demo campaign generated no candidates"
+        qualities = [featurize(c).quality for c in candidates]
+        assert FeatureQuality.FULL in qualities, (
+            f"MIBG demo campaign yielded no FULL-quality constructs. "
+            f"Qualities: {qualities}"
+        )
+
+    def test_mibg_demo_outer_loop_runs_all_configured_turns(self):
+        """The flagship demo must complete all 4 configured turns."""
+        spec = _make_mibg_spec(campaign_id="mibg-all-turns-test")
+        ledger = LedgerStore(":memory:")
+        outer = _make_outer_loop(spec, ledger, run_id="mibg-all-turns-run")
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            outer.run()
+        assert len(outer._score_history) == spec.budget.max_cycles, (
+            f"Expected {spec.budget.max_cycles} turns, "
+            f"got {len(outer._score_history)}"
+        )
+
+    def test_mibg_demo_multi_turn_records_keep_or_revert_per_turn(self):
+        """Each turn after the first must produce a STRATEGY_MODIFICATION entry
+        with a 'kept' boolean and a non-empty 'rationale'."""
+        spec = _make_mibg_spec(campaign_id="mibg-multiturn-kr-test")
+        ledger = LedgerStore(":memory:")
+        outer = _make_outer_loop(spec, ledger, run_id="mibg-kr-run")
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            outer.run()
+
+        n_turns = len(outer._score_history)
+        expected_mods = max(0, n_turns - 1)  # turn 0 never has a modification
+
+        mods = ledger.query(
+            campaign_id=spec.campaign_id,
+            entry_type=LedgerEntryType.STRATEGY_MODIFICATION,
+        )
+        assert len(mods) == expected_mods, (
+            f"Expected {expected_mods} STRATEGY_MODIFICATION entries for "
+            f"{n_turns} turns, got {len(mods)}"
+        )
+        for mod in mods:
+            assert "kept" in mod.data, f"STRATEGY_MODIFICATION missing 'kept': {mod.data}"
+            assert isinstance(mod.data["kept"], bool), "'kept' must be a boolean"
+            assert "rationale" in mod.data, f"STRATEGY_MODIFICATION missing 'rationale': {mod.data}"
+            assert mod.data["rationale"], "'rationale' must be non-empty"
+
+    def test_mibg_demo_strategy_modifications_coherent_with_campaign_target(self):
+        """Strategy modifications must reference NET/MIBG, not a different campaign target."""
+        spec = _make_mibg_spec(campaign_id="mibg-coherence-test")
+        ledger = LedgerStore(":memory:")
+        outer = _make_outer_loop(spec, ledger, run_id="mibg-coherence-run")
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            outer.run()
+
+        mods = ledger.query(
+            campaign_id=spec.campaign_id,
+            entry_type=LedgerEntryType.STRATEGY_MODIFICATION,
+        )
+        for mod in mods:
+            # The "focus" modification must not reference a different campaign's target
+            desc = mod.data.get("modification", {}).get("modification_description", "")
+            if "focus" in desc.lower():
+                assert "PSMA" not in desc, (
+                    f"Strategy modification in NET campaign references PSMA: {desc!r}"
+                )
+
+    def test_mibg_demo_produces_no_fallback_warnings(self):
+        """A run of the flagship demo must emit no FALLBACK registry warnings."""
+        from autoradionuclide.featurization.registry import reset_registry_warning_state
+
+        reset_registry_warning_state()
+        spec = _make_mibg_spec(campaign_id="mibg-no-fallback-test")
+        ledger = LedgerStore(":memory:")
+        outer = _make_outer_loop(spec, ledger, run_id="mibg-nf-run")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            outer.run()
+
+        fallback_warnings = [
+            x for x in w
+            if issubclass(x.category, UserWarning)
+            and "not found in registry" in str(x.message)
+        ]
+        assert len(fallback_warnings) == 0, (
+            f"Flagship demo emitted {len(fallback_warnings)} FALLBACK registry warnings "
+            f"— all proposed constructs should resolve:\n"
+            + "\n".join(str(x.message) for x in fallback_warnings)
+        )
