@@ -350,7 +350,7 @@ ar-inspect psma_campaign.db --campaign-id psma-lu177-example-001
 ```
 ## Archetecture
 
-![Alt text](./radiology1)
+![Alt text](./radiology1.png)
 
 ## Contact
 
