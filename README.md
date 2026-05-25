@@ -51,6 +51,10 @@ OuterLoop (AutoResearch meta-loop)
 ```
 
 ---
+## Archetecture
+
+![Alt text](./radiology1.png)
+
 
 ## Running Offline (No API Key, No Cost)
 
@@ -370,9 +374,7 @@ Every campaign can be replayed because the ledger records:
 ```bash
 ar-inspect psma_campaign.db --campaign-id psma-lu177-example-001
 ```
-## Archetecture
 
-![Alt text](./radiology1.png)
 
 ## Contact
 
